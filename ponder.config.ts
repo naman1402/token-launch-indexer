@@ -3,40 +3,37 @@ import { createConfig, factory } from "ponder";
 
 import { http } from "viem";
 
-import { LlamaCoreAbi } from "./abis/LlamaCoreAbi";
-import { LlamaPolicyAbi } from "./abis/LlamaPolicyAbi";
+import { UniswapV2FactoryABI } from "./abis/UniswapV2FactoryABI";
+import { UniswapV3FactoryABI } from "./abis/UniswapV3FactoryABI";
+import { mainnet } from "viem/chains";
 
-const llamaFactoryEvent = parseAbiItem(
-  "event LlamaInstanceCreated(address indexed deployer, string indexed name, address llamaCore, address llamaExecutor, address llamaPolicy, uint256 chainId)",
+const pairCreatedEvent = parseAbiItem(
+  "event PairCreated(address indexed token0, address indexed token1, address pair, uint)"
+);
+
+const poolCreatedEvent = parseAbiItem(
+  "event PoolCreated(address indexed token0, address indexed token1, uint24 fee, int24 tickSpacing, address pool)"
 );
 
 export default createConfig({
   networks: {
-    sepolia: {
-      chainId: 11155111,
-      transport: http(process.env.PONDER_RPC_URL_11155111),
+    mainnet: {
+      chainId: 1,
+      transport: http(process.env.PONDER_RPC_URL_1),
     },
   },
   contracts: {
-    LlamaCore: {
-      network: "sepolia",
-      abi: LlamaCoreAbi,
-      address: factory({
-        address: "0xFf5d4E226D9A3496EECE31083a8F493edd79AbEB",
-        event: llamaFactoryEvent,
-        parameter: "llamaCore",
-      }),
-      startBlock: 4121269,
+    UniswapV2Factory: {
+      network: "mainnet",
+      abi: [pairCreatedEvent],
+      address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+      startBlock: 10000835,
     },
-    LlamaPolicy: {
-      network: "sepolia",
-      abi: LlamaPolicyAbi,
-      address: factory({
-        address: "0xFf5d4E226D9A3496EECE31083a8F493edd79AbEB",
-        event: llamaFactoryEvent,
-        parameter: "llamaPolicy",
-      }),
-      startBlock: 4121269,
-    },
+    UniswapV3Factory: {
+      network: "mainnet",
+      abi: [poolCreatedEvent],
+      address: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+      startBlock: 12369621,
+    }
   },
 });
