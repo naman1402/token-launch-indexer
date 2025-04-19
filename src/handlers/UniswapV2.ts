@@ -22,7 +22,7 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
     })
 
     const launchTimestamp = Number(event.block.timestamp)
-    const launchBlock = Number(event.block.number)
+    const launchBlock = blockNumber
 
     await context.db.insert(schema.tokens).values({
         address: token0, 
