@@ -1,5 +1,5 @@
 import { ponder } from "ponder:registry";
-import { pools } from "ponder:schema";
+import { poolsV2 } from "ponder:schema";
 import { isEthToken, processInitialLp } from "../../utils/sniper";
 
 // Handle Mint events to track initial LP
@@ -9,7 +9,7 @@ ponder.on("UniswapV2Factory:Mint", async ({ event, context }) => {
   const { sender, amount0, amount1 } = event.args;
   
   // Get pool record
-  const pool = await context.db.find(pools, { id: pairAddress });
+  const pool = await context.db.find(poolsV2, { id: pairAddress });
   
   // If pool doesn't exist or this isn't the launch block, skip
   if (!pool || blockNumber !== pool.launchBlock) {
@@ -44,7 +44,7 @@ ponder.on("UniswapV2Factory:Mint", async ({ event, context }) => {
   }
   
   // Update pool with initial LP information
-  await context.db.update(pools, { id: pairAddress })
+  await context.db.update(poolsV2, { id: pairAddress })
     .set({ initialLpEth });
 });
 

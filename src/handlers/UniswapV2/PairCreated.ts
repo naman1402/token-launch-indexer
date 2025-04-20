@@ -1,5 +1,5 @@
 import { ponder } from "ponder:registry"
-import { pools, tokens } from "ponder:schema"
+import { poolsV2, tokens } from "ponder:schema"
 import { getTokenMetadata } from "../../utils/getMetadata"
 import { isEthToken } from "../../utils/sniper"
 import { erc20Abi } from "viem"
@@ -72,7 +72,7 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
   });
 
   // Insert pool record (we'll update with LP info after analyzing the Mint event)
-  await context.db.insert(pools).values({
+  await context.db.insert(poolsV2).values({
     id: pair,
     token0: token0,
     token1: token1,
