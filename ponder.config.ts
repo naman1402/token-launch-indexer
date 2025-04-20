@@ -15,6 +15,14 @@ const poolCreatedEvent = parseAbiItem(
   "event PoolCreated(address indexed token0, address indexed token1, uint24 fee, int24 tickSpacing, address pool)"
 );
 
+const mintEvent = parseAbiItem(
+  "event Mint(address indexed sender, uint amount0, uint amount1)"
+)
+
+const swapEvent = parseAbiItem(
+  "event Swap(address indexed sender, uint amount0In, uint amount1In, uint amount0Out, uint amount1Out, address indexed to)"
+)
+
 export default createConfig({
   networks: {
     mainnet: {
@@ -25,7 +33,7 @@ export default createConfig({
   contracts: {
     UniswapV2Factory: {
       network: "mainnet",
-      abi: [pairCreatedEvent],
+      abi: [pairCreatedEvent, mintEvent, swapEvent],
       address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
       startBlock: 10000835,
     },

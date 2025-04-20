@@ -11,7 +11,7 @@ export const tokens = onchainTable("tokens", (t) => ({
   symbol: t.text().notNull(),                 
   creationBlock: t.integer().notNull(),    
   deployer: t.hex().notNull(),
-
+  totalSupply: t.bigint(),
 }));
 
 // ──────────────
@@ -23,7 +23,11 @@ export const pools = onchainTable("pools", (t) => ({
   token1: t.hex().notNull(),            
   lpType: t.text().notNull(),                    
   launchBlock: t.integer().notNull(),             
-  launchTimestamp: t.integer().notNull(),                       
+  launchTimestamp: t.integer().notNull(),
+  initialLpEth: t.bigint(),
+  totalSniperVolume: t.bigint(),
+  totalSnipersCount: t.integer(),
+  totalSniperSupplyPercent: t.real(),                       
 }));
 
 // ──────────────
@@ -32,9 +36,10 @@ export const pools = onchainTable("pools", (t) => ({
 export const snipers = onchainTable("snipers", (t) => ({
   id: t.text().primaryKey(),
   pool: t.hex().notNull(),              
-  address: t.hex(),                  
-  volume: t.bigint(),              
-  percentOfSupply: t.real(),          
+  address: t.hex().notNull(),                  
+  ethAmount: t.bigint().notNull(),
+  tokenAmount: t.bigint().notNull(),              
+  percentOfSupply: t.real().notNull(),          
 }), (table) => ({
     poolIndex: index().on(table.pool),
 }));
