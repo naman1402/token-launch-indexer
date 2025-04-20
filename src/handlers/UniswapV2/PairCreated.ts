@@ -1,8 +1,11 @@
 import { ponder } from "ponder:registry"
-import { poolsV2, tokens } from "ponder:schema"
+import { poolsV2, tokens, funding } from "ponder:schema"
 import { getTokenMetadata } from "../../utils/getMetadata"
 import { isEthToken } from "../../utils/sniper"
 import { erc20Abi } from "viem"
+import { containsNodeError } from "viem/utils"
+import { trace } from "console"
+import { findThreeLevelFunders } from "../../utils/funding"
 
 // Handler for pair creation event
 ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
@@ -80,4 +83,45 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
     launchBlock: launchBlock,
     launchTimestamp: launchTimestamp,
   });
+
+  // Get deployer address
+  const deployer = event.transaction.from;
+  try {
+    console.log(`Finding funders for deployer ${deployer} of token ${tokenAddress}`);
+    const funders = await findThreeLevelFunders(deployer, BigInt(launchBlock));
+    if (funders.level1) {
+      await context.db.insert(funding).values({
+        id: `${tokenAddress}-1`,
+        token: tokenAddress,
+        level: 1,
+        from: funders.level1,
+        to: deployer,
+        value: 0n, // You'd need to fetch the actual value from transaction data
+      });
+    }
+
+    if (funders.level2) {
+      await context.db.insert(funding).values({
+        id: `${tokenAddress}-2`,
+        token: tokenAddress,
+        level: 2,
+        from: funders.level2,
+        to: deployer,
+        value: 0n, // You'd need to fetch the actual value from transaction data
+      });
+    }
+
+    if (funders.level3) {
+      await context.db.insert(funding).values({
+        id: `${tokenAddress}-3`,
+        token: tokenAddress,
+        level: 3,
+        from: funders.level3,
+        to: deployer,
+        value: 0n, // You'd need to fetch the actual value from transaction data
+      });
+    }
+  } catch(e) {
+    console.error(`Error finding funders for deployer ${deployer} of token ${tokenAddress}:`, e);
+  }
 });
