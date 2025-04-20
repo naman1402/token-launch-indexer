@@ -42,7 +42,11 @@ async function findFirstETHSender(
   target: Address,
   maxBlock: bigint
 ): Promise<Address | null> {
+
+  // Skip 2000 blocks at a time
+  // @note Use binary search for better performance
   const blocksToScan = 2000n;
+  // Start scanning from the maximum block down to 0
   let currentBlock = maxBlock;
 
   while (currentBlock > 0n) {
@@ -50,7 +54,9 @@ async function findFirstETHSender(
       blockNumber: currentBlock,
       includeTransactions: true,
     });
-
+    // Search for transactions that sent ETH to the target address
+    // This approach only captures ETH transfers
+    // Note: This does not capture ERC20 transfers, NFT Transfers, Indirect Funding
     const incomingTx = block.transactions.find(
       (tx) =>
         tx.to?.toLowerCase() === target.toLowerCase() &&

@@ -1,6 +1,7 @@
 import { ponder } from "ponder:registry";
 import { poolsV2, tokens } from "ponder:schema";
-import { processInitialLp, calculateMarketCap, isBaseToken } from "../../utils/sniper";
+import { processInitialLp } from "../../utils/sniper";
+import { calculateMarketCap } from "../../utils/marketCap";
 import { erc20Abi } from "viem";
 
 // Handle Mint events to track initial LP

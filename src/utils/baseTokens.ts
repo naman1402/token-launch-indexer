@@ -2,8 +2,6 @@
 export const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".toLowerCase();
 export const USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".toLowerCase();
 export const USDT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7".toLowerCase();
-
-// Base tokens array for easy checking
 export const BASE_TOKENS = [WETH_ADDRESS, USDC_ADDRESS, USDT_ADDRESS];
 
 /**
@@ -29,9 +27,9 @@ export function getBaseTokenName(address: string): string {
 }
 
 // Keeping the old function for backward compatibility
-export function isEthToken(address: string): boolean {
-  return address.toLowerCase() === WETH_ADDRESS;
-}
+// export function isEthToken(address: string): boolean {
+//   return address.toLowerCase() === WETH_ADDRESS;
+// }
 
 /**
  * Normalize token order to ensure base token is always token0
