@@ -179,3 +179,30 @@ export function calculateBundleBlocks(firstBlock: number, lastBlock: number): bi
   return BigInt(Math.max(0, lastBlock - firstBlock + 1));
 }
 
+/**
+ * Calculate market cap based on total supply and initial LP
+ * @param totalSupply Total supply of the token
+ * @param ethAmount ETH amount in initial LP
+ * @param tokenAmount Token amount in initial LP
+ * @returns Estimated market cap in ETH value
+ */
+export function calculateMarketCap(
+  totalSupply: bigint,
+  ethAmount: bigint,
+  tokenAmount: bigint
+): bigint {
+  // If either amount is zero, can't calculate
+  if (ethAmount === 0n || tokenAmount === 0n) {
+    return 0n;
+  }
+  
+  // Calculate token price in ETH: ETH amount / token amount
+  // Then multiply by total supply to get market cap
+  // Use scaling factor to avoid precision loss in integer division
+  const scalingFactor = 10000000000n; // 10^10
+  const tokenPriceScaled = (ethAmount * scalingFactor) / tokenAmount;
+  const marketCap = (totalSupply * tokenPriceScaled) / scalingFactor;
+  
+  return marketCap;
+}
+
