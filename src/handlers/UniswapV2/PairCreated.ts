@@ -1,10 +1,8 @@
 import { ponder } from "ponder:registry"
 import { poolsV2, tokens, funding } from "ponder:schema"
 import { getTokenMetadata } from "../../utils/getMetadata"
-import { isEthToken } from "../../utils/sniper"
+import { isBaseToken, normalizeTokenOrder } from "../../utils/baseTokens"
 import { erc20Abi } from "viem"
-import { containsNodeError } from "viem/utils"
-import { trace } from "console"
 import { findThreeLevelFunders } from "../../utils/funding"
 
 // Handler for pair creation event
@@ -15,113 +13,142 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
   const pair = event.args[2] as `0x${string}`;
   const blockNumber = Number(event.block.number);
 
+  // Check if either token is a base token (ETH/USDC/USDT)
+  const token0IsBase = isBaseToken(token0);
+  const token1IsBase = isBaseToken(token1);
+  
+  // If neither token is a base token, we can skip as we're only interested in base token pairs
+  if (!token0IsBase && !token1IsBase) {
+    return;
+  }
+
+  // Normalize token order to ensure base token is token0 and project token is token1
+  const { baseToken, projectToken, baseIsToken0 } = normalizeTokenOrder(token0, token1);
+
   // Get token metadata
-  const token0Metadata = await getTokenMetadata({
+  const baseTokenMetadata = await getTokenMetadata({
     client: context.client,
-    address: token0,
+    address: baseToken,
   });
 
-  const token1Metadata = await getTokenMetadata({
+  const projectTokenMetadata = await getTokenMetadata({
     client: context.client,
-    address: token1,
+    address: projectToken,
   });
 
   const launchTimestamp = Number(event.block.timestamp);
   const launchBlock = blockNumber;
 
-  // Check which token is ETH/WETH
-  const token0IsEth = isEthToken(token0);
-  const token1IsEth = isEthToken(token1);
-  
-  // If neither token is ETH/WETH, we can skip as we're only interested in ETH pairs
-  // (you can remove this if you want to track all pairs)
-  if (!token0IsEth && !token1IsEth) {
-    return;
-  }
-
-  // Determine which is the token (not ETH)
-  const tokenAddress = token0IsEth ? token1 : token0;
-
-  // Get total supply of the token
+  // Get total supply of the project token
   let totalSupply = 0n;
   try {
     const result = await context.client.readContract({
-      address: tokenAddress,
+      address: projectToken,
       abi: erc20Abi,
       functionName: "totalSupply",
     });
     totalSupply = result;
   } catch (error) {
-    console.error(`Error fetching total supply for ${tokenAddress}:`, error);
+    console.error(`Error fetching total supply for ${projectToken}:`, error);
   }
 
-  // Insert token records
-  await context.db.insert(tokens).values({
-    address: token0, 
-    name: token0Metadata.name,
-    symbol: token0Metadata.symbol,
-    creationBlock: launchBlock,
-    deployer: event.transaction.from,
-    totalSupply: token0 === tokenAddress ? totalSupply : undefined,
-  });
+  // Insert or update base token record
+  const existingBaseToken = await context.db.find(tokens, { address: baseToken });
+  if (existingBaseToken) {
+    // Base token already exists in the database, no need to update
+    console.log(`Base token ${baseToken} already exists in the database`);
+  } else {
+    // Insert base token
+    await context.db.insert(tokens).values({
+      address: baseToken, 
+      name: baseTokenMetadata.name,
+      symbol: baseTokenMetadata.symbol,
+      creationBlock: launchBlock,
+      deployer: event.transaction.from,
+      totalSupply: undefined, // We typically don't need to track supply for base tokens
+    });
+  }
   
-  await context.db.insert(tokens).values({
-    address: token1, 
-    name: token1Metadata.name,
-    symbol: token1Metadata.symbol,
-    creationBlock: launchBlock,
-    deployer: event.transaction.from,
-    totalSupply: token1 === tokenAddress ? totalSupply : undefined,
-  });
+  // Insert or update project token record
+  const existingProjectToken = await context.db.find(tokens, { address: projectToken });
+  if (existingProjectToken) {
+    // Project token exists but we might want to update its total supply
+    await context.db.update(tokens, { address: projectToken })
+      .set({
+        totalSupply: totalSupply,
+      });
+  } else {
+    // Insert project token
+    await context.db.insert(tokens).values({
+      address: projectToken, 
+      name: projectTokenMetadata.name,
+      symbol: projectTokenMetadata.symbol,
+      creationBlock: launchBlock,
+      deployer: event.transaction.from,
+      totalSupply: totalSupply,
+    });
+  }
 
-  // Insert pool record (we'll update with LP info after analyzing the Mint event)
+  // Insert pool record - ensuring base token is always token0
   await context.db.insert(poolsV2).values({
     id: pair,
-    token0: token0,
-    token1: token1,
+    token0: baseToken,  // This is now always the base token (WETH/USDC/USDT)
+    token1: projectToken, // This is now always the project token
     lpType: "UniswapV2",
     launchBlock: launchBlock,
     launchTimestamp: launchTimestamp,
+    baseTokenIsToken0: baseIsToken0, // Storing the original order for reference when processing events
   });
 
   // Get deployer address
   const deployer = event.transaction.from;
   try {
-    console.log(`Finding funders for deployer ${deployer} of token ${tokenAddress}`);
+    console.log(`Finding funders for deployer ${deployer} of token ${projectToken}`);
     const funders = await findThreeLevelFunders(deployer, BigInt(launchBlock));
+    
+    // Check if funders exist and create unique IDs using toLowerCase() to ensure consistency
     if (funders.level1) {
+      const fundingId = `${projectToken.toLowerCase()}-1`;
       await context.db.insert(funding).values({
-        id: `${tokenAddress}-1`,
-        token: tokenAddress,
+        id: fundingId,
+        token: projectToken,
         level: 1,
         from: funders.level1,
         to: deployer,
-        value: 0n, // You'd need to fetch the actual value from transaction data
+        value: 0n,
       });
     }
 
     if (funders.level2) {
+      const fundingId = `${projectToken.toLowerCase()}-2`;
       await context.db.insert(funding).values({
-        id: `${tokenAddress}-2`,
-        token: tokenAddress,
+        id: fundingId,
+        token: projectToken,
         level: 2,
         from: funders.level2,
         to: deployer,
-        value: 0n, // You'd need to fetch the actual value from transaction data
+        value: 0n,
       });
     }
 
     if (funders.level3) {
+      const fundingId = `${projectToken.toLowerCase()}-3`;
       await context.db.insert(funding).values({
-        id: `${tokenAddress}-3`,
-        token: tokenAddress,
+        id: fundingId,
+        token: projectToken,
         level: 3,
         from: funders.level3,
         to: deployer,
-        value: 0n, // You'd need to fetch the actual value from transaction data
+        value: 0n,
       });
     }
+    
+    // If we found any funders, update the token to reflect that
+    if (funders.level1 || funders.level2 || funders.level3) {
+      await context.db.update(tokens, { address: projectToken })
+        .set({ hasFunding: true });
+    }
   } catch(e) {
-    console.error(`Error finding funders for deployer ${deployer} of token ${tokenAddress}:`, e);
+    console.error(`Error finding funders for deployer ${deployer} of token ${projectToken}:`, e);
   }
 });

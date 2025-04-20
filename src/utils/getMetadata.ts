@@ -5,7 +5,7 @@ export async function getTokenMetadata({
   address,
 }: {
   client: any;
-  address: `0x${string}`;
+  address: string;
 }) {
   const [name, symbol, decimals] = await Promise.all([
     client.readContract({

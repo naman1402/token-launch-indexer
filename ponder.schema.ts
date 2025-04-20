@@ -22,12 +22,13 @@ export const tokens = onchainTable("tokens", (t) => ({
 // ──────────────
 export const poolsV2 = onchainTable("poolsV2", (t) => ({
   id: t.hex().primaryKey(),              
-  token0: t.hex().notNull(),  
-  token1: t.hex().notNull(),            
+  token0: t.hex().notNull(),  // Now always the base token (WETH/USDC/USDT)
+  token1: t.hex().notNull(),  // Now always the project token           
   lpType: t.text().notNull().default("UniswapV2"),                    
   launchBlock: t.integer().notNull(),             
   launchTimestamp: t.integer().notNull(),
   initialLpEth: t.bigint(),
+  baseTokenIsToken0: t.boolean().notNull().default(true), // Track original token order
   totalSniperVolume: t.bigint(),
   totalSnipersCount: t.integer(),
   totalSniperSupplyPercent: t.real(),

@@ -1,6 +1,6 @@
 import { ponder } from "ponder:registry";
 import { poolsV2, tokens } from "ponder:schema";
-import { isEthToken, processInitialLp, calculateMarketCap } from "../../utils/sniper";
+import { processInitialLp, calculateMarketCap, isBaseToken } from "../../utils/sniper";
 import { erc20Abi } from "viem";
 
 // Handle Mint events to track initial LP
@@ -22,39 +22,32 @@ ponder.on("UniswapV2Factory:Mint", async ({ event, context }) => {
     return;
   }
   
-  // Determine which token is ETH/WETH
-  const token0IsEth = isEthToken(pool.token0);
-  const token1IsEth = isEthToken(pool.token1);
-  
-  // If neither is ETH/WETH, skip
-  if (!token0IsEth && !token1IsEth) {
-    return;
-  }
-  
-  // Determine which token is non-ETH
-  const tokenAddress = token0IsEth ? pool.token1 : pool.token0;
-  
-  // Extract ETH amount
-  const initialLpEth = processInitialLp({
+  // Determine base token amount (could be ETH, USDC, or USDT)
+  // Note: token0 is now always the base token in our schema, but we need to account
+  // for the original order in the blockchain using baseTokenIsToken0
+  const initialBaseAmount = processInitialLp({
     amount0,
     amount1,
-    token0: pool.token0,
-    token1: pool.token1,
+    token0: pool.baseTokenIsToken0 ? pool.token0 : pool.token1,
+    token1: pool.baseTokenIsToken0 ? pool.token1 : pool.token0,
   });
   
-  // If no ETH in the LP, skip
-  if (initialLpEth === 0n) {
+  // If no base token in the LP, skip
+  if (initialBaseAmount === 0n) {
     return;
   }
   
   // Update pool with initial LP information
   await context.db.update(poolsV2, { id: pairAddress })
-    .set({ initialLpEth });
+    .set({ initialLpEth: initialBaseAmount });
     
+  // The project token is always token1 in our normalized schema
+  const projectTokenAddress = pool.token1;
+  
   // Get token information to calculate market cap
-  const token = await context.db.find(tokens, { address: tokenAddress });
+  const token = await context.db.find(tokens, { address: projectTokenAddress });
   if (!token) {
-    console.error(`Token ${tokenAddress} not found in the database`);
+    console.error(`Token ${projectTokenAddress} not found in the database`);
     return;
   }
   
@@ -63,30 +56,30 @@ ponder.on("UniswapV2Factory:Mint", async ({ event, context }) => {
   if (!totalSupply) {
     try {
       const result = await context.client.readContract({
-        address: tokenAddress,
+        address: projectTokenAddress,
         abi: erc20Abi,
         functionName: "totalSupply",
       });
       totalSupply = result;
     } catch (error) {
-      console.error(`Error fetching total supply for ${tokenAddress}:`, error);
+      console.error(`Error fetching total supply for ${projectTokenAddress}:`, error);
       return;
     }
   }
   
   if (!totalSupply) {
-    console.error(`Could not determine total supply for ${tokenAddress}`);
+    console.error(`Could not determine total supply for ${projectTokenAddress}`);
     return;
   }
   
   // Determine token amount in the LP
-  const tokenAmount = token0IsEth ? amount1 : amount0;
+  const tokenAmount = pool.baseTokenIsToken0 ? amount1 : amount0;
   
   // Calculate market cap
-  const marketCap = calculateMarketCap(totalSupply, initialLpEth, tokenAmount);
+  const marketCap = calculateMarketCap(totalSupply, initialBaseAmount, tokenAmount);
   
   // Update token with market cap
-  await context.db.update(tokens, { address: tokenAddress })
+  await context.db.update(tokens, { address: projectTokenAddress })
     .set({ 
       totalSupply, // Ensure we have the latest supply
       marketCap 

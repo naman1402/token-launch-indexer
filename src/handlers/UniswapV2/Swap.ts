@@ -1,18 +1,26 @@
 import { ponder } from "ponder:registry";
 import { poolsV2, tokens, snipers, teamBundles } from "ponder:schema";
 import { 
-  isEthToken, 
+  WETH_ADDRESS,
+  BASE_TOKENS,
+  isBaseToken 
+} from "../../utils/baseTokens";
+import {
   isSniper,
-  isTeamBundleCandidate,
-  extractEthAmount, 
-  extractTokenAmount,
-  calculateSupplyPercentage,
+  extractBaseTokenAmount, 
+  extractProjectTokenAmount,
   calculateSniperVolume,
-  getUniqueAddresses,
-  createTeamBundleId,
-  calculateBundleBlocks,
-  WETH_ADDRESS
+  processInitialLp
 } from "../../utils/sniper";
+import {
+  isTeamBundleCandidate,
+  createTeamBundleId,
+  calculateBundleBlocks
+} from "../../utils/bundle";
+import {
+  calculateSupplyPercentage,
+  getUniqueAddresses
+} from "../../utils/utils";
 import { erc20Abi, zeroAddress } from "viem";
 import { eq } from "drizzle-orm";
 
@@ -46,25 +54,19 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
     return;
   }
   
-  // Determine which token is ETH
-  const token0IsEth = isEthToken(pool.token0);
-  const token1IsEth = isEthToken(pool.token1);
-  
-  // If neither is ETH/WETH, skip
-  if (!token0IsEth && !token1IsEth) {
-    return;
-  }
-  
-  // Determine which is the token (not ETH)
-  const tokenAddress = token0IsEth ? pool.token1 : pool.token0;
+  // In our schema, token0 is always the base token (ETH/USDC/USDT) and token1 is the project token
+  // But we need to account for the original order on the blockchain
+  const baseIsToken0 = pool.baseTokenIsToken0;
+  const projectTokenAddress = pool.token1;
+  const baseTokenAddress = pool.token0;
 
-  // Extract ETH and token values
-  const ethAmount = extractEthAmount(
-    amount0In, amount1In, amount0Out, amount1Out, token0IsEth
+  // Extract base token and project token amounts
+  const baseTokenAmount = extractBaseTokenAmount(
+    amount0In, amount1In, amount0Out, amount1Out, baseIsToken0
   );
   
-  const tokenAmount = extractTokenAmount(
-    amount0In, amount1In, amount0Out, amount1Out, token0IsEth
+  const projectTokenAmount = extractProjectTokenAmount(
+    amount0In, amount1In, amount0Out, amount1Out, baseIsToken0
   );
   
   // CASE 1: SNIPER DETECTION - Transaction in the launch block
@@ -73,14 +75,14 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
     let totalSupply = 0n;
     try {
       // Try to get the token's total supply from the database first
-      const token = await context.db.find(tokens, { address: tokenAddress });
+      const token = await context.db.find(tokens, { address: projectTokenAddress });
       
       if (token && token.totalSupply) {
         totalSupply = token.totalSupply;
       } else {
         // If not available, fetch it from the blockchain
         const result = await context.client.readContract({
-          address: tokenAddress,
+          address: projectTokenAddress,
           abi: erc20Abi,
           functionName: "totalSupply",
         });
@@ -89,7 +91,7 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
         
         // Update token with total supply
         if (token) {
-          await context.db.update(tokens, { address: tokenAddress })
+          await context.db.update(tokens, { address: projectTokenAddress })
             .set({ totalSupply });
         }
       }
@@ -99,7 +101,7 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
     }
     
     // Calculate percentage of supply
-    const percentOfSupply = calculateSupplyPercentage(tokenAmount, totalSupply);
+    const percentOfSupply = calculateSupplyPercentage(projectTokenAmount, totalSupply);
     
     // Create unique ID for this sniper
     const sniperId = `${pairAddress.toLowerCase()}-${to.toLowerCase()}`;
@@ -111,10 +113,10 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
       // Update existing sniper
       await context.db.update(snipers, { id: sniperId })
         .set({
-          ethAmount: existingSniper.ethAmount + ethAmount,
-          tokenAmount: existingSniper.tokenAmount + tokenAmount,
+          ethAmount: existingSniper.ethAmount + baseTokenAmount,
+          tokenAmount: existingSniper.tokenAmount + projectTokenAmount,
           percentOfSupply: calculateSupplyPercentage(
-            existingSniper.tokenAmount + tokenAmount, 
+            existingSniper.tokenAmount + projectTokenAmount, 
             totalSupply
           ),
         });
@@ -124,33 +126,31 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
         id: sniperId,
         pool: pairAddress,
         address: to,
-        ethAmount,
-        tokenAmount,
+        ethAmount: baseTokenAmount,
+        tokenAmount: projectTokenAmount,
         percentOfSupply,
       });
     }
     
-    // Instead of trying to fetch all snipers, let's use our utilities with the current sniper
-    // This avoids the database query that's causing issues
-    let updatedEthAmount = ethAmount;
-    let updatedTokenAmount = tokenAmount;
-    
     // Add the existing sniper's amounts if it exists
+    let updatedBaseAmount = baseTokenAmount;
+    let updatedTokenAmount = projectTokenAmount;
+    
     if (existingSniper) {
-      updatedEthAmount += existingSniper.ethAmount;
+      updatedBaseAmount += existingSniper.ethAmount;
       updatedTokenAmount += existingSniper.tokenAmount;
     }
     
     // Update the pool stats with the incremental change
     // Get current stats from the pool
-    const currentEthVolume = pool.totalSniperVolume || 0n;
+    const currentBaseVolume = pool.totalSniperVolume || 0n;
     const currentTokensCount = pool.totalSnipersCount || 0;
     const wasNewSniper = !existingSniper;
     
     // Update pool with snipers info
     await context.db.update(poolsV2, { id: pairAddress })
       .set({
-        totalSniperVolume: currentEthVolume + ethAmount,
+        totalSniperVolume: currentBaseVolume + baseTokenAmount,
         // Only increment count if this is a new sniper
         totalSnipersCount: wasNewSniper ? currentTokensCount + 1 : currentTokensCount,
         totalSniperSupplyPercent: calculateSupplyPercentage(
@@ -167,7 +167,7 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
     }
     
     // Create a unique ID for this team bundle
-    const teamBundleId = createTeamBundleId(tokenAddress, pairAddress);
+    const teamBundleId = createTeamBundleId(projectTokenAddress, pairAddress);
     
     // Check if team bundle record already exists
     let teamBundle = await context.db.find(teamBundles, { id: teamBundleId });
@@ -188,7 +188,7 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
       // Create new team bundle record
       await context.db.insert(teamBundles).values({
         id: teamBundleId,
-        token: tokenAddress,
+        token: projectTokenAddress,
         pool: pairAddress,
         bundleBlocks: 1n,
         txCount: 1,
@@ -198,7 +198,7 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
       });
       
       // Also mark the token as having a team bundle
-      await context.db.update(tokens, { address: tokenAddress })
+      await context.db.update(tokens, { address: projectTokenAddress })
         .set({ hasTeamBundle: true });
     }
     
@@ -213,4 +213,4 @@ ponder.on("UniswapV2Factory:Swap", async ({ event, context }) => {
         teamBundleTxCount: teamBundle ? teamBundle.txCount + 1 : 1
       });
   }
-}); 
+});
