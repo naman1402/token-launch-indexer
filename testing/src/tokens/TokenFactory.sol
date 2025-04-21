@@ -1,25 +1,21 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+// SPDX-License-Identifier: GPL-3.0-or-later
+pragma solidity =0.8.29;
 
-import "./interfaces/ITokenFactory.sol";
-import "./BaseERC20.sol";
+import "./MemeToken.sol";
 
-contract TokenFactory is ITokenFactory {
+contract TokenFactory {
+    event TokenCreated(address token, string name, string symbol, uint8 decimals, uint256 totalSupply);
+    
     function createToken(
         string memory name,
         string memory symbol,
         uint8 decimals,
-        uint256 initialSupply
+        uint256 totalSupply
     ) external returns (address) {
-        BaseERC20 token = new BaseERC20(
-            name,
-            symbol,
-            decimals,
-            initialSupply,
-            msg.sender
-        );
+        MemeToken token = new MemeToken(name, symbol, decimals, totalSupply);
+        token.transfer(msg.sender, totalSupply); // Transfer all tokens to creator
         
-        emit TokenCreated(address(token), name, symbol);
+        emit TokenCreated(address(token), name, symbol, decimals, totalSupply);
         return address(token);
     }
 }

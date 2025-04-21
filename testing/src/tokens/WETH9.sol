@@ -1,41 +1,30 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import "forge-std/console.sol";
+// SPDX-License-Identifier: GPL-3.0-or-later
+pragma solidity =0.8.29;
 
 contract WETH9 {
-    string public name = "Wrapped Ether";
-    string public symbol = "WETH";
-    uint8 public decimals = 18;
+    string public name     = "Wrapped Ether";
+    string public symbol   = "WETH";
+    uint8  public decimals = 18;
 
-    event Approval(address indexed src, address indexed guy, uint wad);
-    event Transfer(address indexed src, address indexed dst, uint wad);
-    event Deposit(address indexed dst, uint wad);
-    event Withdrawal(address indexed src, uint wad);
+    event  Approval(address indexed src, address indexed guy, uint wad);
+    event  Transfer(address indexed src, address indexed dst, uint wad);
+    event  Deposit(address indexed dst, uint wad);
+    event  Withdrawal(address indexed src, uint wad);
 
-    mapping(address => uint) public balanceOf;
-    mapping(address => mapping(address => uint)) public allowance;
+    mapping (address => uint)                       public  balanceOf;
+    mapping (address => mapping (address => uint))  public  allowance;
 
     receive() external payable {
-        console.log("WETH received ETH from:", msg.sender, "amount:", msg.value);
-        deposit();
-    }
-
-    fallback() external payable {
-        console.log("WETH fallback called from:", msg.sender, "amount:", msg.value);
         deposit();
     }
 
     function deposit() public payable {
-        console.log("WETH deposit called by:", msg.sender, "amount:", msg.value);
-        require(msg.value > 0, "Cannot deposit 0 ETH");
         balanceOf[msg.sender] += msg.value;
         emit Deposit(msg.sender, msg.value);
-        console.log("WETH deposit successful, new balance:", balanceOf[msg.sender]);
     }
 
     function withdraw(uint wad) public {
-        require(balanceOf[msg.sender] >= wad, "Insufficient balance");
+        require(balanceOf[msg.sender] >= wad);
         balanceOf[msg.sender] -= wad;
         payable(msg.sender).transfer(wad);
         emit Withdrawal(msg.sender, wad);
@@ -56,10 +45,10 @@ contract WETH9 {
     }
 
     function transferFrom(address src, address dst, uint wad) public returns (bool) {
-        require(balanceOf[src] >= wad, "Insufficient balance");
+        require(balanceOf[src] >= wad);
 
-        if (src != msg.sender) {
-            require(allowance[src][msg.sender] >= wad, "Insufficient allowance");
+        if (src != msg.sender && allowance[src][msg.sender] != type(uint).max) {
+            require(allowance[src][msg.sender] >= wad);
             allowance[src][msg.sender] -= wad;
         }
 
@@ -67,6 +56,7 @@ contract WETH9 {
         balanceOf[dst] += wad;
 
         emit Transfer(src, dst, wad);
+
         return true;
     }
 }
