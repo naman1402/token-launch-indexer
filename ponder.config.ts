@@ -8,6 +8,8 @@ import { UniswapV3FactoryABI } from "./abis/UniswapV3FactoryABI";
 import { mainnet } from "viem/chains";
 import path from "path";
 
+import { FACTORY_ADDRESS } from "./src/utils/deployments";
+
 const pairCreatedEvent = parseAbiItem(
   "event PairCreated(address indexed token0, address indexed token1, address pair, uint)"
 );
@@ -36,7 +38,7 @@ export default createConfig({
     UniswapV2Factory: {
       network: "anvil",
       abi: [pairCreatedEvent, mintEvent, swapEvent],
-      address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // This address might need to change based on your local deployment
+      address: `0x${FACTORY_ADDRESS.replace('0x', '')}`, // This address might need to change based on your local deployment
       startBlock: 17001795, // Start from block 0 for local testing
       endBlock: 17002000, 
     },

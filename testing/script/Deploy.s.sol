@@ -76,7 +76,7 @@ contract DeployScript is Script {
             vm.stopBroadcast();
         }
 
-        return DeployedContracts({
+        DeployedContracts memory contracts = DeployedContracts({
             weth: address(weth),
             factory: address(factory),
             tokenFactory: address(tokenFactory),
@@ -84,5 +84,26 @@ contract DeployScript is Script {
             memeToken: launchInfo.token,
             pair: launchInfo.pair
         });
+
+        // Create JSON string with deployment addresses
+        string memory deploymentJson = string(
+            abi.encodePacked(
+                '{\n',
+                '    "weth": "', vm.toString(contracts.weth), '",\n',
+                '    "factory": "', vm.toString(contracts.factory), '",\n',
+                '    "tokenFactory": "', vm.toString(contracts.tokenFactory), '",\n',
+                '    "testScenario": "', vm.toString(contracts.testScenario), '",\n',
+                '    "memeToken": "', vm.toString(contracts.memeToken), '",\n',
+                '    "pair": "', vm.toString(contracts.pair), '"\n',
+                '}'
+            )
+        );
+
+        // Output to console for manual copying
+        console.log("=== Deployment Addresses ===");
+        console.log(deploymentJson);
+        console.log("=== Copy the above JSON to testing/deployments.json ===");
+
+        return contracts;
     }
 }

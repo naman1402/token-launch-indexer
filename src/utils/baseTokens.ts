@@ -1,8 +1,8 @@
-// Define base token addresses (Ethereum mainnet)
-export const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".toLowerCase();
-export const USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".toLowerCase();
-export const USDT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7".toLowerCase();
-export const BASE_TOKENS = [WETH_ADDRESS, USDC_ADDRESS, USDT_ADDRESS];
+import { WETH_ADDRESS } from './deployments';
+
+// Define base token addresses (from local deployment)
+export { WETH_ADDRESS };
+export const BASE_TOKENS = [WETH_ADDRESS];
 
 /**
  * Checks if a token address is a base token (ETH/USDC/USDT)
@@ -21,15 +21,8 @@ export function isBaseToken(address: string): boolean {
 export function getBaseTokenName(address: string): string {
   const lowerAddress = address.toLowerCase();
   if (lowerAddress === WETH_ADDRESS) return "WETH";
-  if (lowerAddress === USDC_ADDRESS) return "USDC";
-  if (lowerAddress === USDT_ADDRESS) return "USDT";
   return "Unknown";
 }
-
-// Keeping the old function for backward compatibility
-// export function isEthToken(address: string): boolean {
-//   return address.toLowerCase() === WETH_ADDRESS;
-// }
 
 /**
  * Normalize token order to ensure base token is always token0
