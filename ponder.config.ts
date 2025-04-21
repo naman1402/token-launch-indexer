@@ -27,7 +27,7 @@ const swapEvent = parseAbiItem(
 export default createConfig({
   networks: {
     anvil: {
-      chainId: 31337,
+      chainId: 1,
       transport: http("http://localhost:8545"),
 
     },
@@ -37,13 +37,13 @@ export default createConfig({
       network: "anvil",
       abi: [pairCreatedEvent, mintEvent, swapEvent],
       address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // This address might need to change based on your local deployment
-      startBlock: 22315867, // Start from block 0 for local testing
+      startBlock: 22316098, // Start from block 0 for local testing
     },
     UniswapV3Factory: {
       network: "anvil",
       abi: [poolCreatedEvent],
       address: "0x1F98431c8aD98523631AE4a59f267346ea31F984", // This address might need to change based on your local deployment
-      startBlock: 22315867, // Start from block 0 for local testing
+      startBlock: 22316098, // Start from block 0 for local testing
     }
   },
 });
