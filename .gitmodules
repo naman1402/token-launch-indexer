@@ -10,3 +10,9 @@
 [submodule "testing/lib/v2-core"]
 	path = testing/lib/v2-core
 	url = https://github.com/Uniswap/v2-core
+[submodule "testing/lib/v2-periphery"]
+	path = testing/lib/v2-periphery
+	url = https://github.com/Uniswap/v2-periphery
+[submodule "testing/lib/solidity-lib"]
+	path = testing/lib/solidity-lib
+	url = https://github.com/Uniswap/solidity-lib
