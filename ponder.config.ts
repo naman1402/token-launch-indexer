@@ -6,6 +6,7 @@ import { http } from "viem";
 import { UniswapV2FactoryABI } from "./abis/UniswapV2FactoryABI";
 import { UniswapV3FactoryABI } from "./abis/UniswapV3FactoryABI";
 import { mainnet } from "viem/chains";
+import path from "path";
 
 const pairCreatedEvent = parseAbiItem(
   "event PairCreated(address indexed token0, address indexed token1, address pair, uint)"
@@ -25,23 +26,24 @@ const swapEvent = parseAbiItem(
 
 export default createConfig({
   networks: {
-    mainnet: {
-      chainId: 1,
-      transport: http(process.env.PONDER_RPC_URL_1),
+    anvil: {
+      chainId: 31337,
+      transport: http("http://localhost:8545"),
+
     },
   },
   contracts: {
     UniswapV2Factory: {
-      network: "mainnet",
+      network: "anvil",
       abi: [pairCreatedEvent, mintEvent, swapEvent],
-      address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
-      startBlock: 10000835,
+      address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // This address might need to change based on your local deployment
+      startBlock: 0, // Start from block 0 for local testing
     },
     UniswapV3Factory: {
-      network: "mainnet",
+      network: "anvil",
       abi: [poolCreatedEvent],
-      address: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
-      startBlock: 12369621,
+      address: "0x1F98431c8aD98523631AE4a59f267346ea31F984", // This address might need to change based on your local deployment
+      startBlock: 0, // Start from block 0 for local testing
     }
   },
 });
