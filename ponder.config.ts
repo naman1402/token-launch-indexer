@@ -28,7 +28,7 @@ export default createConfig({
   networks: {
     anvil: {
       chainId: 1,
-      transport: http("http://localhost:8545"),
+      transport: http(process.env.PONDER_RPC_URL_1),
 
     },
   },
@@ -37,13 +37,14 @@ export default createConfig({
       network: "anvil",
       abi: [pairCreatedEvent, mintEvent, swapEvent],
       address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // This address might need to change based on your local deployment
-      startBlock: 22316900, // Start from block 0 for local testing
+      startBlock: 17001795, // Start from block 0 for local testing
+      endBlock: 17002000, 
     },
     UniswapV3Factory: {
       network: "anvil",
       abi: [poolCreatedEvent],
       address: "0x1F98431c8aD98523631AE4a59f267346ea31F984", // This address might need to change based on your local deployment
-      startBlock: 22316901, // Start from block 0 for local testing
+      startBlock: 22317673, // Start from block 0 for local testing
     }
   },
 });
