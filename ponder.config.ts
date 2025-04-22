@@ -1,22 +1,16 @@
 import { parseAbiItem } from "abitype";
-import { createConfig, factory } from "ponder";
+import { createConfig } from "ponder";
+import { http, getAddress, hexToNumber } from "viem";
 
-import { http } from "viem";
+// Import your deployment broadcast file
+import DeploymentInfo from "./testing/broadcast/Deploy.s.sol/31337/run-latest.json";
 
-import { UniswapV2FactoryABI } from "./abis/UniswapV2FactoryABI";
-import { UniswapV3FactoryABI } from "./abis/UniswapV3FactoryABI";
-import { mainnet } from "viem/chains";
-import path from "path";
-
-import { FACTORY_ADDRESS } from "./src/utils/deployments";
-import { timeout } from "hono/timeout";
+// Extract address and start block from broadcast file
+// const factoryAddress = getAddress(DeploymentInfo.transactions[0]!.contractAddress);
+// const startBlock = hexToNumber(`0x${DeploymentInfo.receipts[0]!.blockNumber}`);
 
 const pairCreatedEvent = parseAbiItem(
   "event PairCreated(address indexed token0, address indexed token1, address pair, uint)"
-);
-
-const poolCreatedEvent = parseAbiItem(
-  "event PoolCreated(address indexed token0, address indexed token1, uint24 fee, int24 tickSpacing, address pool)"
 );
 
 const mintEvent = parseAbiItem(
@@ -31,12 +25,8 @@ export default createConfig({
   networks: {
     anvil: {
       chainId: 31337,
-      // transport: http(process.env.ANVIL_RPC_URL),
-      transport: http("http://localhost:8545", {
-        timeout: 30000,
-        retryCount: 5,
-        retryDelay: 1000,
-      }),
+      transport: http("http://0.0.0.0:8545"),
+      disableCache: true,
     },
   },
   contracts: {
