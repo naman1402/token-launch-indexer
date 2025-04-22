@@ -115,22 +115,6 @@ app.get("/funding/:tokenAddress", async (c) => {
   }
 });
 
-// Get team bundles for a token - USING SQL QUERY
-app.get("/team-bundles/:tokenAddress", async (c) => {
-  try {
-    const tokenAddress = c.req.param("tokenAddress").toLowerCase();
-    
-    const result = await db.execute(
-      sql`SELECT * FROM "teamBundles" WHERE token = ${tokenAddress} LIMIT 100`
-    );
-    
-    return c.json(replaceBigInts(result.rows, (b) => typeof b === "bigint" && b > 0n ? formatEther(b) : b.toString()));
-  } catch (error: any) {
-    console.error("Error fetching team bundles:", error);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
 // Get dashboard stats - USING SQL QUERY
 app.get("/dashboard", async (c) => {
   try {
@@ -209,9 +193,9 @@ app.get("/launch-summary/:tokenAddress", async (c) => {
       sql`SELECT * FROM "funding" WHERE token = ${tokenAddress} ORDER BY level DESC`
     );
     
-    // Get team bundles
-    const teamBundleResult = await db.execute(
-      sql`SELECT * FROM "teamBundles" WHERE token = ${tokenAddress} LIMIT 100`
+    // Get pools with team bundles
+    const poolsWithTeamBundleResult = await db.execute(
+      sql`SELECT * FROM "poolsV2" WHERE "teamBundle" = true AND token1 = ${tokenAddress} LIMIT 100`
     );
     
     const summary = {
@@ -221,8 +205,8 @@ app.get("/launch-summary/:tokenAddress", async (c) => {
       snipers,
       fundingCount: fundingResult.rows.length,
       funding: fundingResult.rows,
-      teamBundlesCount: teamBundleResult.rows.length,
-      teamBundles: teamBundleResult.rows
+      teamBundlesCount: poolsWithTeamBundleResult.rows.length,
+      teamBundles: poolsWithTeamBundleResult.rows
     };
     
     return c.json(replaceBigInts(summary, (b) => typeof b === "bigint" && b > 0n ? formatEther(b) : b.toString()));

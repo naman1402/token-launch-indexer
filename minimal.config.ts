@@ -1,53 +1,46 @@
-import { createConfig } from "ponder";
+import { parseAbiItem } from "abitype";
+import { createConfig, factory } from "ponder";
 import { http } from "viem";
+
+// Uniswap V2 Events
+const pairCreatedEvent = parseAbiItem(
+  "event PairCreated(address indexed token0, address indexed token1, address pair, uint)"
+);
+
+const mintEvent = parseAbiItem(
+  "event Mint(address indexed sender, uint amount0, uint amount1)"
+)
+
+const swapEvent = parseAbiItem(
+  "event Swap(address indexed sender, uint amount0In, uint amount1In, uint amount0Out, uint amount1Out, address indexed to)"
+)
 
 export default createConfig({
   networks: {
     anvil: {
       chainId: 31337,
-      transport: http("http://127.0.0.1:8545"),
+      transport: http("http://0.0.0.0:8545"), // Ensure this is the correct URL for your Anvil node
+      pollingInterval: 1000, // Poll every 1 second (optional)
+      disableCache: true, // Disable caching for development
     },
   },
   contracts: {
+    // Factory only emits PairCreated
     UniswapV2Factory: {
       network: "anvil",
-      abi: [
-        // PairCreated event
-        {
-          name: "PairCreated",
-          type: "event",
-          inputs: [
-            { name: "token0", type: "address", indexed: true },
-            { name: "token1", type: "address", indexed: true },
-            { name: "pair", type: "address", indexed: false },
-            { name: "unused", type: "uint256", indexed: false }
-          ]
-        },
-        // Mint event
-        {
-          name: "Mint",
-          type: "event",
-          inputs: [
-            { name: "sender", type: "address", indexed: true },
-            { name: "amount0", type: "uint256", indexed: false },
-            { name: "amount1", type: "uint256", indexed: false }
-          ]
-        },
-        // Swap event
-        {
-          name: "Swap",
-          type: "event",
-          inputs: [
-            { name: "sender", type: "address", indexed: true },
-            { name: "amount0In", type: "uint256", indexed: false },
-            { name: "amount1In", type: "uint256", indexed: false },
-            { name: "amount0Out", type: "uint256", indexed: false },
-            { name: "amount1Out", type: "uint256", indexed: false },
-            { name: "to", type: "address", indexed: true }
-          ]
-        }
-      ],
-      address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      abi: [pairCreatedEvent],
+      address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // Update this if your deployment uses a different address
+      startBlock: 0,
+    },
+    // Pair contracts emit Mint, Swap events
+    UniswapV2Pair: {
+      network: "anvil",
+      abi: [mintEvent, swapEvent],
+      address: factory({
+        address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // Same as UniswapV2Factory address
+        event: pairCreatedEvent,
+        parameter: "pair",
+      }),
       startBlock: 0,
     },
   },

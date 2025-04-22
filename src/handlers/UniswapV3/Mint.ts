@@ -1,17 +1,17 @@
 import { ponder } from "ponder:registry";
-import { poolsV2, tokens } from "ponder:schema";
+import { poolsV3, tokens } from "ponder:schema";
 import { processInitialLp } from "../../utils/sniper";
 import { calculateMarketCap } from "../../utils/marketCap";
 import { erc20Abi } from "viem";
 
-// Handle Mint events to track initial LP
-ponder.on("UniswapV2Pair:Mint", async ({ event, context }) => {
-  const pairAddress = event.log.address;
+// Handle Mint events to track initial LP in Uniswap V3
+ponder.on("UniswapV3Pool:Mint", async ({ event, context }) => {
+  const poolAddress = event.log.address;
   const blockNumber = Number(event.block.number);
-  const { sender, amount0, amount1 } = event.args;
+  const { sender, owner, tickLower, tickUpper, amount, amount0, amount1 } = event.args;
   
-  // Get pool record
-  const pool = await context.db.find(poolsV2, { id: pairAddress });
+  // Get pool information
+  const pool = await context.db.find(poolsV3, { id: poolAddress });
   
   // If pool doesn't exist or this isn't the launch block, skip
   if (!pool || blockNumber !== pool.launchBlock) {
@@ -23,9 +23,7 @@ ponder.on("UniswapV2Pair:Mint", async ({ event, context }) => {
     return;
   }
   
-  // Determine base token amount (could be ETH, USDC, or USDT)
-  // Note: token0 is now always the base token in our schema, but we need to account
-  // for the original order in the blockchain using baseTokenIsToken0
+  // Account for the original token order using baseTokenIsToken0, just like in V2
   const initialBaseAmount = processInitialLp({
     amount0,
     amount1,
@@ -39,12 +37,12 @@ ponder.on("UniswapV2Pair:Mint", async ({ event, context }) => {
   }
   
   // Update pool with initial LP information
-  await context.db.update(poolsV2, { id: pairAddress })
+  await context.db.update(poolsV3, { id: poolAddress })
     .set({ initialLpEth: initialBaseAmount });
-    
-  // The project token is always token1 in our normalized schema
-  const projectTokenAddress = pool.token1;
   
+  // Project token is always token1 in our normalized schema
+  const projectTokenAddress = pool.token1;
+
   // Get token information to calculate market cap
   const token = await context.db.find(tokens, { address: projectTokenAddress });
   if (!token) {
@@ -73,7 +71,7 @@ ponder.on("UniswapV2Pair:Mint", async ({ event, context }) => {
     return;
   }
   
-  // Determine token amount in the LP
+  // For calculating market cap, consider the original token order
   const tokenAmount = pool.baseTokenIsToken0 ? amount1 : amount0;
   
   // Calculate market cap
@@ -86,4 +84,3 @@ ponder.on("UniswapV2Pair:Mint", async ({ event, context }) => {
       marketCap 
     });
 });
-

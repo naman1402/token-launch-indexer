@@ -1,16 +1,17 @@
 import { ponder } from "ponder:registry"
-import { poolsV2, tokens, funding } from "ponder:schema"
+import { poolsV3, tokens, funding } from "ponder:schema"
 import { getTokenMetadata } from "../../utils/getMetadata"
 import { isBaseToken, normalizeTokenOrder } from "../../utils/baseTokens"
 import { erc20Abi } from "viem"
 import { findThreeLevelFunders } from "../../utils/funding"
 
-// Handler for pair creation event
-ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
+// Handler for pool creation event in Uniswap V3
+ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
   // Extract event data
-  const token0 = event.args[0] as `0x${string}`;
-  const token1 = event.args[1] as `0x${string}`;
-  const pair = event.args[2] as `0x${string}`;
+  const token0 = event.args.token0 as `0x${string}`;
+  const token1 = event.args.token1 as `0x${string}`;
+  const pool = event.args.pool as `0x${string}`;
+  const fee = Number(event.args.fee);
   const blockNumber = Number(event.block.number);
 
   // Check if either token is a base token (ETH/USDC/USDT)
@@ -54,11 +55,8 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
 
   // Insert or update base token record
   const existingBaseToken = await context.db.find(tokens, { address: baseToken });
-  if (existingBaseToken) {
-    // Base token already exists in the database, no need to update
-    console.log(`Base token ${baseToken} already exists in the database`);
-  } else {
-    // Insert base token
+  if (!existingBaseToken) {
+    // Insert base token if it doesn't exist
     await context.db.insert(tokens).values({
       address: baseToken, 
       name: baseTokenMetadata.name,
@@ -90,15 +88,16 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
   }
 
   // Insert pool record - ensuring base token is always token0
-  await context.db.insert(poolsV2).values({
-    id: pair,
+  await context.db.insert(poolsV3).values({
+    id: pool,
     token0: baseToken,  // This is now always the base token (WETH/USDC/USDT)
     token1: projectToken, // This is now always the project token
-    lpType: "UniswapV2",
+    fee: fee, // V3 specific parameter
+    lpType: "UniswapV3",
     launchBlock: launchBlock,
     launchTimestamp: launchTimestamp,
-    launchTxHash: event.transaction.hash,  // Store the transaction hash of the launch
-    baseTokenIsToken0: baseIsToken0, // Storing the original order for reference when processing events
+    launchTxHash: event.transaction.hash, // Store the transaction hash of the launch
+    baseTokenIsToken0: baseIsToken0, // Track original token order for event processing
   });
 
   // Get deployer address
@@ -107,7 +106,7 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
     console.log(`Finding funders for deployer ${deployer} of token ${projectToken}`);
     const funders = await findThreeLevelFunders(deployer, BigInt(launchBlock));
     
-    // Check if funders exist and create unique IDs using toLowerCase() to ensure consistency
+    // Create funding entries if funders exist
     if (funders.level1) {
       const fundingId = `${projectToken.toLowerCase()}-1`;
       await context.db.insert(funding).values({

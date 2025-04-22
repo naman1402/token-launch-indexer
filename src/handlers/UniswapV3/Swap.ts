@@ -1,16 +1,14 @@
 import { ponder } from "ponder:registry";
-import { poolsV2, tokens, snipers } from "ponder:schema";
+import { poolsV3, tokens, snipers } from "ponder:schema";
 import { 
   WETH_ADDRESS,
-  BASE_TOKENS,
   isBaseToken 
 } from "../../utils/baseTokens";
 import {
   isSniper,
   extractBaseTokenAmount, 
   extractProjectTokenAmount,
-  calculateSniperVolume,
-  processInitialLp
+  calculateSniperVolume
 } from "../../utils/sniper";
 import {
   isTeamBundleCandidate
@@ -20,7 +18,6 @@ import {
   getUniqueAddresses
 } from "../../utils/utils";
 import { erc20Abi, zeroAddress } from "viem";
-import { eq } from "drizzle-orm";
 
 // Type definition for sniper to avoid 'any' type
 interface SniperRecord {
@@ -32,40 +29,50 @@ interface SniperRecord {
   percentOfSupply: number;
 }
 
-// Handle Swap events to track snipers and team bundles
-ponder.on("UniswapV2Pair:Swap", async ({ event, context }) => {
-  const pairAddress = event.log.address;
+// Handle Swap events to track snipers and team bundles in Uniswap V3
+ponder.on("UniswapV3Pool:Swap", async ({ event, context }) => {
+  const poolAddress = event.log.address;
   const blockNumber = Number(event.block.number);
   const txHash = event.transaction.hash;
-  const { sender, amount0In, amount1In, amount0Out, amount1Out, to } = event.args;
+  const { sender, recipient, amount0, amount1, sqrtPriceX96, liquidity, tick } = event.args;
   
   // Skip transactions from/to the zero address or pool itself
-  if (to.toLowerCase() === zeroAddress || to.toLowerCase() === pairAddress.toLowerCase()) {
+  if (recipient.toLowerCase() === zeroAddress || recipient.toLowerCase() === poolAddress.toLowerCase()) {
     return;
   }
   
   // Get pool information
-  const pool = await context.db.find(poolsV2, { id: pairAddress });
+  const pool = await context.db.find(poolsV3, { id: poolAddress });
   
   // If pool doesn't exist, skip
   if (!pool) {
     return;
   }
   
-  // In our schema, token0 is always the base token (ETH/USDC/USDT) and token1 is the project token
-  // But we need to account for the original order on the blockchain
-  const baseIsToken0 = pool.baseTokenIsToken0;
-  const projectTokenAddress = pool.token1;
+  // In our schema, token0 is the base token and token1 is the project token
+  // But we need to account for the original order using baseTokenIsToken0
   const baseTokenAddress = pool.token0;
+  const projectTokenAddress = pool.token1;
+  const baseIsToken0 = pool.baseTokenIsToken0;
 
-  // Extract base token and project token amounts
-  const baseTokenAmount = extractBaseTokenAmount(
-    amount0In, amount1In, amount0Out, amount1Out, baseIsToken0
-  );
+  // V3 swap direction is determined by the sign of amount0 and amount1
+  // We need to consider the original token order to correctly identify buys vs sells
+  let baseTokenAmount = 0n;
+  let projectTokenAmount = 0n;
   
-  const projectTokenAmount = extractProjectTokenAmount(
-    amount0In, amount1In, amount0Out, amount1Out, baseIsToken0
-  );
+  // Determine if this is a buy or sell, accounting for token order
+  const isBuy = baseIsToken0 
+    ? (amount0 > 0n && amount1 < 0n)  // Base is token0: sending base, receiving project
+    : (amount0 < 0n && amount1 > 0n); // Base is token1: sending project, receiving base
+  
+  if (isBuy) {
+    // User is buying the project token
+    baseTokenAmount = baseIsToken0 ? amount0 : amount1;
+    projectTokenAmount = baseIsToken0 ? -amount1 : -amount0; // Make positive for easier handling
+  } else {
+    // Not a buy, we don't track these as snipers
+    return;
+  }
   
   // CASE 1: SNIPER DETECTION - Transaction in the launch block
   if (isSniper(blockNumber, pool.launchBlock)) {
@@ -102,7 +109,7 @@ ponder.on("UniswapV2Pair:Swap", async ({ event, context }) => {
     const percentOfSupply = calculateSupplyPercentage(projectTokenAmount, totalSupply);
     
     // Create unique ID for this sniper
-    const sniperId = `${pairAddress.toLowerCase()}-${to.toLowerCase()}`;
+    const sniperId = `${poolAddress.toLowerCase()}-${recipient.toLowerCase()}`;
     
     // Check if sniper already exists
     const existingSniper = await context.db.find(snipers, { id: sniperId });
@@ -122,35 +129,32 @@ ponder.on("UniswapV2Pair:Swap", async ({ event, context }) => {
       // Insert new sniper
       await context.db.insert(snipers).values({
         id: sniperId,
-        pool: pairAddress,
-        address: to,
+        pool: poolAddress,
+        address: recipient,
         ethAmount: baseTokenAmount,
         tokenAmount: projectTokenAmount,
         percentOfSupply,
       });
     }
     
-    // Add the existing sniper's amounts if it exists
-    let updatedBaseAmount = baseTokenAmount;
-    let updatedTokenAmount = projectTokenAmount;
-    
-    if (existingSniper) {
-      updatedBaseAmount += existingSniper.ethAmount;
-      updatedTokenAmount += existingSniper.tokenAmount;
-    }
-    
     // Update the pool stats with the incremental change
     // Get current stats from the pool
     const currentBaseVolume = pool.totalSniperVolume || 0n;
-    const currentTokensCount = pool.totalSnipersCount || 0;
+    const currentSnipersCount = pool.totalSnipersCount || 0;
     const wasNewSniper = !existingSniper;
     
+    // Add the existing sniper's amounts if it exists
+    let updatedTokenAmount = projectTokenAmount;
+    if (existingSniper) {
+      updatedTokenAmount += existingSniper.tokenAmount;
+    }
+    
     // Update pool with snipers info
-    await context.db.update(poolsV2, { id: pairAddress })
+    await context.db.update(poolsV3, { id: poolAddress })
       .set({
         totalSniperVolume: currentBaseVolume + baseTokenAmount,
         // Only increment count if this is a new sniper
-        totalSnipersCount: wasNewSniper ? currentTokensCount + 1 : currentTokensCount,
+        totalSnipersCount: wasNewSniper ? currentSnipersCount + 1 : currentSnipersCount,
         totalSniperSupplyPercent: calculateSupplyPercentage(
           (pool.totalSniperVolume || 0n) + updatedTokenAmount, 
           totalSupply
@@ -160,7 +164,7 @@ ponder.on("UniswapV2Pair:Swap", async ({ event, context }) => {
   // CASE 2: TEAM BUNDLE DETECTION - Transaction is the launch transaction
   else if (isTeamBundleCandidate(txHash, pool.launchTxHash)) {
     // Update pool with team bundle information
-    await context.db.update(poolsV2, { id: pairAddress })
+    await context.db.update(poolsV3, { id: poolAddress })
       .set({ teamBundle: true });
     
     // Also mark the token as having a team bundle
