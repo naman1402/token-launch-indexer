@@ -9,6 +9,7 @@ import { mainnet } from "viem/chains";
 import path from "path";
 
 import { FACTORY_ADDRESS } from "./src/utils/deployments";
+import { timeout } from "hono/timeout";
 
 const pairCreatedEvent = parseAbiItem(
   "event PairCreated(address indexed token0, address indexed token1, address pair, uint)"
@@ -29,24 +30,21 @@ const swapEvent = parseAbiItem(
 export default createConfig({
   networks: {
     anvil: {
-      chainId: 1,
-      transport: http(process.env.PONDER_RPC_URL_1),
-
+      chainId: 31337,
+      // transport: http(process.env.ANVIL_RPC_URL),
+      transport: http("http://localhost:8545", {
+        timeout: 30000,
+        retryCount: 5,
+        retryDelay: 1000,
+      }),
     },
   },
   contracts: {
     UniswapV2Factory: {
       network: "anvil",
       abi: [pairCreatedEvent, mintEvent, swapEvent],
-      address: `0x${FACTORY_ADDRESS.replace('0x', '')}`, // This address might need to change based on your local deployment
-      startBlock: 17001795, // Start from block 0 for local testing
-      endBlock: 17002000, 
+      address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", 
+      startBlock: 0,  
     },
-    UniswapV3Factory: {
-      network: "anvil",
-      abi: [poolCreatedEvent],
-      address: "0x1F98431c8aD98523631AE4a59f267346ea31F984", // This address might need to change based on your local deployment
-      startBlock: 22317673, // Start from block 0 for local testing
-    }
   },
 });
