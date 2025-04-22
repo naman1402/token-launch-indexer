@@ -29,7 +29,7 @@ export default createConfig({
     UniswapV2Factory: {
       network: "anvil",
       abi: [pairCreatedEvent],
-      address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // Update this if your deployment uses a different address
+      address: "0x610178dA211FEF7D417bC0e6FeD39F05609AD788", // Update this if your deployment uses a different address
       startBlock: 0,
     },
     // Pair contracts emit Mint, Swap events
@@ -37,7 +37,7 @@ export default createConfig({
       network: "anvil",
       abi: [mintEvent, swapEvent],
       address: factory({
-        address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // Same as UniswapV2Factory address
+        address: "0x610178dA211FEF7D417bC0e6FeD39F05609AD788", // Same as UniswapV2Factory address
         event: pairCreatedEvent,
         parameter: "pair",
       }),

@@ -82,3 +82,13 @@ export const funding = onchainTable("funding", (t) => ({
 }), (table) => ({
   tokenIndex: index().on(table.token),
 }));
+
+// ──────────────
+// Dummy Table for Testing
+// ──────────────
+export const dummyTable = onchainTable("dummyTable", (t) => ({
+  id: t.text().primaryKey(),
+  name: t.text().notNull(),
+  value: t.integer().notNull(),
+  created_at: t.integer().notNull(), // Fixed column name to use snake_case
+}));

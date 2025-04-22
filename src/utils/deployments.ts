@@ -23,7 +23,7 @@ export function getDeployedAddresses(): DeployedAddresses {
 const addresses = getDeployedAddresses();
 
 // Export individual addresses
-export const WETH_ADDRESS = addresses.weth;
+export const WETH_ADDRESS = "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318";
 export const FACTORY_ADDRESS = addresses.factory;
 export const TOKEN_FACTORY_ADDRESS = addresses.tokenFactory;
 export const TEST_SCENARIO_ADDRESS = addresses.testScenario;
