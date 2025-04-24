@@ -6,6 +6,12 @@ import { uniswapV2FactoryABI } from "./abis/UniswapV2FactoryABI";
 import { uniswapV3FactoryABI } from "./abis/UniswapV3FactoryABI";
 import { uniswapV3PoolABI } from "./abis/UniswapV3PoolABI";
 
+// Import utility function to get deployed addresses
+import { getContractAddresses } from "./src/utils/getDeployedAddresses";
+
+// Get the latest deployed contract addresses
+const addresses = getContractAddresses();
+
 export default createConfig({
   networks: {
     anvil: {
@@ -20,7 +26,7 @@ export default createConfig({
     UniswapV2Factory: {
       network: "anvil",
       abi: uniswapV2FactoryABI,
-      address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      address: addresses.UNISWAP_V2_FACTORY_ADDRESS,
       startBlock: 0,
     },
     // Pair contracts using full ABI with factory pattern
@@ -28,7 +34,7 @@ export default createConfig({
       network: "anvil",
       abi: uniswapV2PairABI,
       address: factory({
-        address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+        address: addresses.UNISWAP_V2_FACTORY_ADDRESS,
         event: parseAbiItem("event PairCreated(address indexed token0, address indexed token1, address pair, uint)"),
         parameter: "pair",
       }),
@@ -38,14 +44,14 @@ export default createConfig({
     UniswapV3Factory: {
       network: "anvil",
       abi: uniswapV3FactoryABI,
-      address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+      address: addresses.UNISWAP_V3_FACTORY_ADDRESS,
       startBlock: 0,
     },
     UniswapV3Pool: {
       network: "anvil",
       abi: uniswapV3PoolABI,
       address: factory({
-        address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+        address: addresses.UNISWAP_V3_FACTORY_ADDRESS,
         event: parseAbiItem("event PoolCreated(address indexed token0, address indexed token1, uint24 indexed fee, int24 tickSpacing, address pool)"),
         parameter: "pool",
       }),

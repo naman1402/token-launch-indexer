@@ -1,9 +1,9 @@
 // Define base token addresses (from local deployment)
-export const WETH_ADDRESS = "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318";
+export const WETH_ADDRESS = "0x09635F643e140090A9A8Dcd712eD6285858ceBef";
 const MAINNET_WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 // Add your local Anvil testing addresses
-export const ANVIL_WETH = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"; 
-export const ANVIL_FACTORY = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+export const ANVIL_WETH = "0x09635F643e140090A9A8Dcd712eD6285858ceBef"; 
+export const ANVIL_FACTORY = "0xc5a5C42992dECbae36851359345FE25997F5C42d";
 
 export const BASE_TOKENS = [
   WETH_ADDRESS, 
