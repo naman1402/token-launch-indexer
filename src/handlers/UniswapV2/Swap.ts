@@ -34,137 +34,141 @@ interface SniperRecord {
 
 // Handle Swap events to track snipers and team bundles
 ponder.on("UniswapV2Pair:Swap", async ({ event, context }) => {
-  const pairAddress = event.log.address;
+  const poolAddress = event.log.address;
   const blockNumber = Number(event.block.number);
   const txHash = event.transaction.hash;
   const { sender, amount0In, amount1In, amount0Out, amount1Out, to } = event.args;
   
+  console.log(`Swap event detected in pool: ${poolAddress}`);
+  
   // Skip transactions from/to the zero address or pool itself
-  if (to.toLowerCase() === zeroAddress || to.toLowerCase() === pairAddress.toLowerCase()) {
+  if (to.toLowerCase() === zeroAddress || to.toLowerCase() === poolAddress.toLowerCase()) {
+    console.log("Transaction to zero address or pool itself, skipping");
     return;
   }
   
   // Get pool information
-  const pool = await context.db.find(poolsV2, { id: pairAddress });
+  const pool = await context.db.find(poolsV2, { id: poolAddress });
   
   // If pool doesn't exist, skip
   if (!pool) {
+    console.log(`Pool not found: ${poolAddress}`);
     return;
   }
   
-  // In our schema, token0 is always the base token (ETH/USDC/USDT) and token1 is the project token
-  // But we need to account for the original order on the blockchain
-  const baseIsToken0 = pool.baseTokenIsToken0;
-  const projectTokenAddress = pool.token1;
+  // In our schema, token0 is the base token and token1 is the project token
+  // But we need to account for the original order using baseTokenIsToken0
   const baseTokenAddress = pool.token0;
+  const projectTokenAddress = pool.token1;
 
-  // Extract base token and project token amounts
-  const baseTokenAmount = extractBaseTokenAmount(
-    amount0In, amount1In, amount0Out, amount1Out, baseIsToken0
-  );
+  // Determine if this is a buy or sell, accounting for token order
+  const isBuy = pool.baseTokenIsToken0 
+    ? (amount0In > 0n && amount1Out > 0n)  // Base is token0: sending base, receiving project
+    : (amount1In > 0n && amount0Out > 0n); // Base is token1: sending project, receiving base
   
-  const projectTokenAmount = extractProjectTokenAmount(
-    amount0In, amount1In, amount0Out, amount1Out, baseIsToken0
-  );
-  
-  // CASE 1: SNIPER DETECTION - Transaction in the launch block
-  if (isSniper(blockNumber, pool.launchBlock)) {
-    // Process as a sniper transaction
-    let totalSupply = 0n;
-    try {
-      // Try to get the token's total supply from the database first
-      const token = await context.db.find(tokens, { address: projectTokenAddress });
-      
-      if (token && token.totalSupply) {
-        totalSupply = token.totalSupply;
-      } else {
-        // If not available, fetch it from the blockchain
-        const result = await context.client.readContract({
-          address: projectTokenAddress,
-          abi: erc20Abi,
-          functionName: "totalSupply",
-        });
+  if (isBuy) {
+    // User is buying the project token
+    const baseTokenAmount = extractBaseTokenAmount(amount0In, amount1In, pool.baseTokenIsToken0);
+    const projectTokenAmount = extractProjectTokenAmount(amount0Out, amount1Out, pool.baseTokenIsToken0);
+    
+    // CASE 1: SNIPER DETECTION - Transaction in the launch block
+    if (isSniper(blockNumber, pool.launchBlock)) {
+      console.log("Sniper detected!");
+      // Process as a sniper transaction
+      let totalSupply = 0n;
+      try {
+        // Try to get the token's total supply from the database first
+        const token = await context.db.find(tokens, { address: projectTokenAddress });
         
-        totalSupply = result;
-        
-        // Update token with total supply
-        if (token) {
-          await context.db.update(tokens, { address: projectTokenAddress })
-            .set({ totalSupply });
+        if (token && token.totalSupply) {
+          totalSupply = token.totalSupply;
+        } else {
+          // If not available, fetch it from the blockchain
+          const result = await context.client.readContract({
+            address: projectTokenAddress,
+            abi: erc20Abi,
+            functionName: "totalSupply",
+          });
+          
+          totalSupply = result;
+          
+          // Update token with total supply
+          if (token) {
+            await context.db.update(tokens, { address: projectTokenAddress })
+              .set({ totalSupply });
+          }
         }
+      } catch (error) {
+        console.error(`Error fetching total supply:`, error);
+        return;
       }
-    } catch (error) {
-      console.error(`Error fetching total supply:`, error);
-      return;
-    }
-    
-    // Calculate percentage of supply
-    const percentOfSupply = calculateSupplyPercentage(projectTokenAmount, totalSupply);
-    
-    // Create unique ID for this sniper
-    const sniperId = `${pairAddress.toLowerCase()}-${to.toLowerCase()}`;
-    
-    // Check if sniper already exists
-    const existingSniper = await context.db.find(snipers, { id: sniperId });
-    
-    if (existingSniper) {
-      // Update existing sniper
-      await context.db.update(snipers, { id: sniperId })
+      
+      // Calculate percentage of supply
+      const percentOfSupply = calculateSupplyPercentage(projectTokenAmount, totalSupply);
+      
+      // Create unique ID for this sniper
+      const sniperId = `${poolAddress.toLowerCase()}-${to.toLowerCase()}`;
+      
+      // Check if sniper already exists
+      const existingSniper = await context.db.find(snipers, { id: sniperId });
+      
+      if (existingSniper) {
+        // Update existing sniper
+        await context.db.update(snipers, { id: sniperId })
+          .set({
+            ethAmount: existingSniper.ethAmount + baseTokenAmount,
+            tokenAmount: existingSniper.tokenAmount + projectTokenAmount,
+            percentOfSupply: calculateSupplyPercentage(
+              existingSniper.tokenAmount + projectTokenAmount, 
+              totalSupply
+            ),
+          });
+      } else {
+        // Insert new sniper
+        await context.db.insert(snipers).values({
+          id: sniperId,
+          pool: poolAddress,
+          address: to,
+          ethAmount: baseTokenAmount,
+          tokenAmount: projectTokenAmount,
+          percentOfSupply,
+        });
+      }
+      
+      // Update the pool stats with the incremental change
+      // Get current stats from the pool
+      const currentBaseVolume = pool.totalSniperVolume || 0n;
+      const currentSnipersCount = pool.totalSnipersCount || 0;
+      const wasNewSniper = !existingSniper;
+      
+      // Add the existing sniper's amounts if it exists
+      let updatedTokenAmount = projectTokenAmount;
+      if (existingSniper) {
+        updatedTokenAmount += existingSniper.tokenAmount;
+      }
+      
+      // Update pool with snipers info
+      await context.db.update(poolsV2, { id: poolAddress })
         .set({
-          ethAmount: existingSniper.ethAmount + baseTokenAmount,
-          tokenAmount: existingSniper.tokenAmount + projectTokenAmount,
-          percentOfSupply: calculateSupplyPercentage(
-            existingSniper.tokenAmount + projectTokenAmount, 
+          totalSniperVolume: currentBaseVolume + baseTokenAmount,
+          // Only increment count if this is a new sniper
+          totalSnipersCount: wasNewSniper ? currentSnipersCount + 1 : currentSnipersCount,
+          totalSniperSupplyPercent: calculateSupplyPercentage(
+            (pool.totalSniperVolume || 0n) + updatedTokenAmount, 
             totalSupply
           ),
         });
-    } else {
-      // Insert new sniper
-      await context.db.insert(snipers).values({
-        id: sniperId,
-        pool: pairAddress,
-        address: to,
-        ethAmount: baseTokenAmount,
-        tokenAmount: projectTokenAmount,
-        percentOfSupply,
-      });
     }
-    
-    // Add the existing sniper's amounts if it exists
-    let updatedBaseAmount = baseTokenAmount;
-    let updatedTokenAmount = projectTokenAmount;
-    
-    if (existingSniper) {
-      updatedBaseAmount += existingSniper.ethAmount;
-      updatedTokenAmount += existingSniper.tokenAmount;
+    // CASE 2: TEAM BUNDLE DETECTION - Transaction is the launch transaction
+    else if (isTeamBundleCandidate(txHash, pool.launchTxHash)) {
+      console.log("Team bundle detected!");
+      // Update pool with team bundle information
+      await context.db.update(poolsV2, { id: poolAddress })
+        .set({ teamBundle: true });
+      
+      // Also mark the token as having a team bundle
+      await context.db.update(tokens, { address: projectTokenAddress })
+        .set({ hasTeamBundle: true });
     }
-    
-    // Update the pool stats with the incremental change
-    // Get current stats from the pool
-    const currentBaseVolume = pool.totalSniperVolume || 0n;
-    const currentTokensCount = pool.totalSnipersCount || 0;
-    const wasNewSniper = !existingSniper;
-    
-    // Update pool with snipers info
-    await context.db.update(poolsV2, { id: pairAddress })
-      .set({
-        totalSniperVolume: currentBaseVolume + baseTokenAmount,
-        // Only increment count if this is a new sniper
-        totalSnipersCount: wasNewSniper ? currentTokensCount + 1 : currentTokensCount,
-        totalSniperSupplyPercent: calculateSupplyPercentage(
-          (pool.totalSniperVolume || 0n) + updatedTokenAmount, 
-          totalSupply
-        ),
-      });
-  }
-  // CASE 2: TEAM BUNDLE DETECTION - Transaction is the launch transaction
-  else if (isTeamBundleCandidate(txHash, pool.launchTxHash)) {
-    // Update pool with team bundle information
-    await context.db.update(poolsV2, { id: pairAddress })
-      .set({ teamBundle: true });
-    
-    // Also mark the token as having a team bundle
-    await context.db.update(tokens, { address: projectTokenAddress })
-      .set({ hasTeamBundle: true });
   }
 });

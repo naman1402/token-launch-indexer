@@ -44,7 +44,7 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
   let totalSupply = 0n;
   try {
     const result = await context.client.readContract({
-      address: projectToken,
+      address: projectToken as `0x${string}`,
       abi: erc20Abi,
       functionName: "totalSupply",
     });
@@ -54,11 +54,11 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
   }
 
   // Insert or update base token record
-  const existingBaseToken = await context.db.find(tokens, { address: baseToken });
+  const existingBaseToken = await context.db.find(tokens, { address: baseToken as `0x${string}` });
   if (!existingBaseToken) {
     // Insert base token if it doesn't exist
     await context.db.insert(tokens).values({
-      address: baseToken, 
+      address: baseToken as `0x${string}`, 
       name: baseTokenMetadata.name,
       symbol: baseTokenMetadata.symbol,
       creationBlock: launchBlock,
@@ -68,17 +68,17 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
   }
   
   // Insert or update project token record
-  const existingProjectToken = await context.db.find(tokens, { address: projectToken });
+  const existingProjectToken = await context.db.find(tokens, { address: projectToken as  `0x${string}` });;
   if (existingProjectToken) {
     // Project token exists but we might want to update its total supply
-    await context.db.update(tokens, { address: projectToken })
+    await context.db.update(tokens, { address: projectToken as  `0x${string}` })
       .set({
         totalSupply: totalSupply,
       });
   } else {
     // Insert project token
     await context.db.insert(tokens).values({
-      address: projectToken, 
+      address: projectToken as `0x${string}`, 
       name: projectTokenMetadata.name,
       symbol: projectTokenMetadata.symbol,
       creationBlock: launchBlock,
@@ -90,8 +90,8 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
   // Insert pool record - ensuring base token is always token0
   await context.db.insert(poolsV3).values({
     id: pool,
-    token0: baseToken,  // This is now always the base token (WETH/USDC/USDT)
-    token1: projectToken, // This is now always the project token
+    token0: baseToken as `0x${string}`,  // This is now always the base token (WETH/USDC/USDT)
+    token1: projectToken as `0x${string}`, // This is now always the project token
     fee: fee, // V3 specific parameter
     lpType: "UniswapV3",
     launchBlock: launchBlock,
@@ -111,7 +111,7 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
       const fundingId = `${projectToken.toLowerCase()}-1`;
       await context.db.insert(funding).values({
         id: fundingId,
-        token: projectToken,
+        token: projectToken as `0x${string}`,
         level: 1,
         from: funders.level1,
         to: deployer,
@@ -123,7 +123,7 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
       const fundingId = `${projectToken.toLowerCase()}-2`;
       await context.db.insert(funding).values({
         id: fundingId,
-        token: projectToken,
+        token: projectToken as `0x${string}`,
         level: 2,
         from: funders.level2,
         to: deployer,
@@ -135,7 +135,7 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
       const fundingId = `${projectToken.toLowerCase()}-3`;
       await context.db.insert(funding).values({
         id: fundingId,
-        token: projectToken,
+        token: projectToken as `0x${string}`,
         level: 3,
         from: funders.level3,
         to: deployer,
@@ -145,7 +145,7 @@ ponder.on("UniswapV3Factory:PoolCreated", async ({ event, context }) => {
     
     // If we found any funders, update the token to reflect that
     if (funders.level1 || funders.level2 || funders.level3) {
-      await context.db.update(tokens, { address: projectToken })
+      await context.db.update(tokens, { address: projectToken as `0x${string}`})
         .set({ hasFunding: true });
     }
   } catch(e) {

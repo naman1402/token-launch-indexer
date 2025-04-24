@@ -14,49 +14,41 @@ export function isSniper(transactionBlock: number, launchBlock: number): boolean
  * Extract base token amount from swap event based on token positions
  * @param amount0In Amount of token0 input
  * @param amount1In Amount of token1 input
- * @param amount0Out Amount of token0 output
- * @param amount1Out Amount of token1 output
  * @param baseIsToken0 Whether base token is token0 (true) or token1 (false)
  * @returns Base token amount involved in the swap
  */
 export function extractBaseTokenAmount(
   amount0In: bigint,
   amount1In: bigint,
-  amount0Out: bigint,
-  amount1Out: bigint,
   baseIsToken0: boolean
 ): bigint {
   if (baseIsToken0) {
-    // If base token is token0, then base token amount is either token0 in (buying token) or token1 out (selling token)
-    return amount0In > 0n ? amount0In : amount1Out;
+    // If base token is token0, then base token amount is amount0In
+    return amount0In;
   } else {
-    // If base token is token1, then base token amount is either token1 in (buying token) or token0 out (selling token)
-    return amount1In > 0n ? amount1In : amount0Out;
+    // If base token is token1, then base token amount is amount1In
+    return amount1In;
   }
 }
 
 /**
  * Extract project token amount from swap event based on token positions
- * @param amount0In Amount of token0 input
- * @param amount1In Amount of token1 input
  * @param amount0Out Amount of token0 output
  * @param amount1Out Amount of token1 output
  * @param baseIsToken0 Whether base token is token0 (true) or token1 (false)
  * @returns Project token amount involved in the swap
  */
 export function extractProjectTokenAmount(
-  amount0In: bigint,
-  amount1In: bigint,
   amount0Out: bigint,
   amount1Out: bigint,
   baseIsToken0: boolean
 ): bigint {
   if (baseIsToken0) {
-    // If base token is token0, then project token amount is either token1 in (selling token) or token0 out (buying token)
-    return amount1In > 0n ? amount1In : amount0Out;
+    // If base token is token0, then project token amount is amount1Out
+    return amount1Out;
   } else {
-    // If base token is token1, then project token amount is either token0 in (selling token) or token1 out (buying token)
-    return amount0In > 0n ? amount0In : amount1Out;
+    // If base token is token1, then project token amount is amount0Out
+    return amount0Out;
   }
 }
 

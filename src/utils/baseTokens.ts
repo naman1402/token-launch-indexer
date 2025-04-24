@@ -1,8 +1,18 @@
-import { WETH_ADDRESS } from './deployments';
-
 // Define base token addresses (from local deployment)
-export { WETH_ADDRESS };
-export const BASE_TOKENS = [WETH_ADDRESS];
+export const WETH_ADDRESS = "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318";
+const MAINNET_WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+// Add your local Anvil testing addresses
+export const ANVIL_WETH = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"; 
+export const ANVIL_FACTORY = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+export const BASE_TOKENS = [
+  WETH_ADDRESS, 
+  MAINNET_WETH, 
+  ANVIL_WETH,
+  // Add other stable tokens if needed
+  "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
+  "0xdac17f958d2ee523a2206206994597c13d831ec7"  // USDT
+];
 
 /**
  * Checks if a token address is a base token (ETH/USDC/USDT)
@@ -10,7 +20,20 @@ export const BASE_TOKENS = [WETH_ADDRESS];
  * @returns true if the address is a base token, false otherwise
  */
 export function isBaseToken(address: string): boolean {
-  return BASE_TOKENS.includes(address.toLowerCase());
+  if (!address) {
+    console.log("Warning: isBaseToken called with empty address");
+    return false;
+  }
+  
+  // Ensure we're comparing normalized addresses
+  const normalizedAddress = address.toLowerCase();
+  
+  // Filter out any undefined or null values before comparison
+  const result = BASE_TOKENS.filter(Boolean).some(baseToken => 
+    baseToken && baseToken.toLowerCase() === normalizedAddress);
+  
+  console.log(`isBaseToken check for ${address}: ${result}`);
+  return result;
 }
 
 /**
@@ -19,9 +42,23 @@ export function isBaseToken(address: string): boolean {
  * @returns String name of the token or "Unknown" if not a base token
  */
 export function getBaseTokenName(address: string): string {
+  if (!address) return "Unknown";
+  
   const lowerAddress = address.toLowerCase();
-  if (lowerAddress === WETH_ADDRESS) return "WETH";
-  return "Unknown";
+  
+  if (lowerAddress === WETH_ADDRESS.toLowerCase() || 
+      lowerAddress === MAINNET_WETH.toLowerCase() ||
+      lowerAddress === ANVIL_WETH.toLowerCase()) {
+    return "WETH";
+  }
+  
+  // Add other token name lookups here
+  const tokenNames: Record<string, string> = {
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": "USDC",
+    "0xdac17f958d2ee523a2206206994597c13d831ec7": "USDT"
+  };
+  
+  return tokenNames[lowerAddress] || "Unknown";
 }
 
 /**
@@ -30,35 +67,30 @@ export function getBaseTokenName(address: string): string {
  * @param token1 Second token address
  * @returns Object with normalized token order and a flag indicating if order was swapped
  */
-export function normalizeTokenOrder(token0: string, token1: string): { 
-  baseToken: `0x${string}`; 
-  projectToken: `0x${string}`; 
-  baseIsToken0: boolean;
-} {
+export function normalizeTokenOrder(token0: string, token1: string) {
+  if (!token0 || !token1) {
+    console.error("Invalid tokens passed to normalizeTokenOrder:", {token0, token1});
+    // Return a safe default
+    return {
+      baseToken: token0 || "0x0000000000000000000000000000000000000000",
+      projectToken: token1 || "0x0000000000000000000000000000000000000000",
+      baseIsToken0: true
+    };
+  }
+
   const token0IsBase = isBaseToken(token0);
   const token1IsBase = isBaseToken(token1);
   
-  // If only one is a base token, make it token0
+  console.log(`Token base status - token0(${token0}): ${token0IsBase}, token1(${token1}): ${token1IsBase}`);
+  
   if (token0IsBase && !token1IsBase) {
-    return { 
-      baseToken: token0 as `0x${string}`, 
-      projectToken: token1 as `0x${string}`, 
-      baseIsToken0: true 
-    };
+    return { baseToken: token0, projectToken: token1, baseIsToken0: true };
   }
   
   if (!token0IsBase && token1IsBase) {
-    return { 
-      baseToken: token1 as `0x${string}`, 
-      projectToken: token0 as `0x${string}`, 
-      baseIsToken0: false 
-    };
+    return { baseToken: token1, projectToken: token0, baseIsToken0: false };
   }
   
-  // If both or neither are base tokens, maintain original order but flag accordingly
-  return { 
-    baseToken: (token0IsBase ? token0 : token1) as `0x${string}`, 
-    projectToken: (token0IsBase ? token1 : token0) as `0x${string}`,
-    baseIsToken0: token0IsBase 
-  };
+  // Neither is a base token or both are, use token0 as "base"
+  return { baseToken: token0, projectToken: token1, baseIsToken0: true };
 }

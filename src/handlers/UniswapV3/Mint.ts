@@ -8,7 +8,7 @@ import { erc20Abi } from "viem";
 ponder.on("UniswapV3Pool:Mint", async ({ event, context }) => {
   const poolAddress = event.log.address;
   const blockNumber = Number(event.block.number);
-  const { sender, owner, tickLower, tickUpper, amount, amount0, amount1 } = event.args;
+  const { owner, tickLower, tickUpper, amount, amount0, amount1 } = event.args;
   
   // Get pool information
   const pool = await context.db.find(poolsV3, { id: poolAddress });

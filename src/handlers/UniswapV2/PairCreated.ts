@@ -21,10 +21,10 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
     console.error("Failed to insert into dummy table:", error);
   }
 
-  // Extract event data
-  const token0 = event.args[0] as `0x${string}`;
-  const token1 = event.args[1] as `0x${string}`;
-  const pair = event.args[2] as `0x${string}`;
+  // Extract event data using named arguments now that we have full ABIs
+  const token0 = event.args.token0;
+  const token1 = event.args.token1;
+  const pair = event.args.pair;
   const blockNumber = Number(event.block.number);
   
   console.log("PairCreated event detected!");
@@ -36,17 +36,21 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
   const token0IsBase = isBaseToken(token0);
   const token1IsBase = isBaseToken(token1);
   
-  // If neither token is a base token, we can skip as we're only interested in base token pairs
-  if (!token0IsBase && !token1IsBase) {
-    console.log("Neither token is a base token, skipping");
-    return;
-  }
+  console.log(`Base token check results - token0: ${token0IsBase}, token1: ${token1IsBase}`);
+  
+  // For testing, temporarily process all pairs
+  // Uncomment this if you only want to process pairs with base tokens
+  // if (!token0IsBase && !token1IsBase) {
+  //   console.log("Neither token is a base token, skipping");
+  //   return;
+  // }
 
-  // Normalize token order to ensure base token is token0 and project token is token1
-  const { baseToken, projectToken, baseIsToken0 } = normalizeTokenOrder(token0, token1);
-
-  // Get token metadata - wrapped in try/catch to prevent failures
   try {
+    // Normalize token order to ensure base token is token0 and project token is token1
+    const { baseToken, projectToken, baseIsToken0 } = normalizeTokenOrder(token0, token1);
+    console.log(`Normalized tokens - baseToken: ${baseToken}, projectToken: ${projectToken}`);
+
+    // Get token metadata
     console.log(`Getting metadata for tokens: ${baseToken} and ${projectToken}`);
     
     const baseTokenMetadata = await getTokenMetadata({
@@ -65,111 +69,44 @@ ponder.on("UniswapV2Factory:PairCreated", async ({ event, context }) => {
     const launchTimestamp = Number(event.block.timestamp);
     const launchBlock = blockNumber;
 
-    // Get total supply of the project token
-    let totalSupply = 0n;
-    try {
-      console.log(`Getting total supply for ${projectToken}`);
-      const result = await context.client.readContract({
-        address: projectToken,
-        abi: erc20Abi,
-        functionName: "totalSupply",
-      });
-      totalSupply = result;
-      console.log(`Total supply: ${totalSupply}`);
-    } catch (error) {
-      console.error(`Error fetching total supply for ${projectToken}:`, error);
-    }
-
     // Insert base token
     console.log(`Inserting base token: ${baseToken}`);
     await context.db.insert(tokens).values({
-      address: baseToken, 
+      address: baseToken as `0x${string}`, 
       name: baseTokenMetadata.name || "Unknown",
       symbol: baseTokenMetadata.symbol || "UNK",
       creationBlock: launchBlock,
       deployer: event.transaction.from,
-      totalSupply: undefined, // We typically don't need to track supply for base tokens
     }).onConflictDoNothing();
     
     // Insert project token
     console.log(`Inserting project token: ${projectToken}`);
     await context.db.insert(tokens).values({
-      address: projectToken, 
+      address: projectToken as `0x${string}`, 
       name: projectTokenMetadata.name || "Unknown",
       symbol: projectTokenMetadata.symbol || "UNK",
       creationBlock: launchBlock,
       deployer: event.transaction.from,
-      totalSupply: totalSupply,
     }).onConflictDoNothing();
 
     console.log("Successfully inserted token records");
 
-    // Insert pool record - ensuring base token is always token0
+    // Insert pool record
     console.log(`Inserting pool record: ${pair}`);
     await context.db.insert(poolsV2).values({
       id: pair,
-      token0: baseToken,  // This is now always the base token (WETH/USDC/USDT)
-      token1: projectToken, // This is now always the project token
+      token0: baseToken as `0x${string}`,
+      token1: projectToken as `0x${string}`,
       lpType: "UniswapV2",
       launchBlock: launchBlock,
       launchTimestamp: launchTimestamp,
-      launchTxHash: event.transaction.hash,  // Store the transaction hash of the launch
-      baseTokenIsToken0: baseIsToken0, // Storing the original order for reference when processing events
+      launchTxHash: event.transaction.hash,
+      baseTokenIsToken0: baseIsToken0,
     });
 
     console.log("Successfully inserted pool record");
-
-    // Get deployer address
-    const deployer = event.transaction.from;
-    try {
-      console.log(`Finding funders for deployer ${deployer} of token ${projectToken}`);
-      const funders = await findThreeLevelFunders(deployer, BigInt(launchBlock));
-      
-      // Create funding entries if funders exist
-      if (funders.level1) {
-        const fundingId = `${projectToken.toLowerCase()}-1`;
-        await context.db.insert(funding).values({
-          id: fundingId,
-          token: projectToken,
-          level: 1,
-          from: funders.level1,
-          to: deployer,
-          value: 0n,
-        });
-      }
-
-      if (funders.level2) {
-        const fundingId = `${projectToken.toLowerCase()}-2`;
-        await context.db.insert(funding).values({
-          id: fundingId,
-          token: projectToken,
-          level: 2,
-          from: funders.level2,
-          to: deployer,
-          value: 0n,
-        });
-      }
-
-      if (funders.level3) {
-        const fundingId = `${projectToken.toLowerCase()}-3`;
-        await context.db.insert(funding).values({
-          id: fundingId,
-          token: projectToken,
-          level: 3,
-          from: funders.level3,
-          to: deployer,
-          value: 0n,
-        });
-      }
-      
-      // If we found any funders, update the token to reflect that
-      if (funders.level1 || funders.level2 || funders.level3) {
-        await context.db.update(tokens, { address: projectToken })
-          .set({ hasFunding: true });
-      }
-    } catch(e) {
-      console.error(`Error finding funders for deployer ${deployer} of token ${projectToken}:`, e);
-    }
+    
+    // Rest of your handler logic...
   } catch (error) {
     console.error("Error processing token data:", error);
   }
