@@ -1,69 +1,176 @@
-# Token Launch Indexer
+# 🚀 Token Launch Indexer
 
-This project indexes newly launched tokens on Uniswap, tracking their initial liquidity, sniper activity, and other metrics.
+<div align="center">
+  <img src="https://img.shields.io/badge/built%20with-Ponder-purple" alt="Built with Ponder">
+  <img src="https://img.shields.io/badge/powered%20by-TypeScript-blue" alt="Powered by TypeScript">
+  <img src="https://img.shields.io/badge/Uniswap-V2%20%26%20V3-pink" alt="Uniswap V2 & V3">
+</div>
 
-## Project Structure
+<br />
 
-The codebase is organized as follows:
+This project indexes newly launched tokens on Uniswap, tracking their initial liquidity, sniper activity, funding graphs, and team bundle detection. It provides a comprehensive suite of metrics to analyze the health and behavior of token launches.
 
-### Schema
+## 🔍 Features
 
-`ponder.schema.ts` defines the database schema with the following tables:
-- `tokens`: Stores token metadata and total supply
-- `pools`: Stores pool information, initial LP, and sniper statistics 
-- `snipers`: Tracks individual sniper addresses and their activity
+- **Token Tracking**: Indexes metadata, total supply, and market cap
+- **Liquidity Analysis**: Monitors initial LP provision and liquidity depth
+- **Sniper Detection**: Identifies and tracks addresses that buy in the launch block
+- **Team Bundles**: Detects suspicious transaction patterns in the launch block
+- **Funding Graph**: Maps the flow of funds leading to token deployment
+- **API Endpoints**: Provides easy access to all indexed data
+
+## 🏗️ Project Structure
+
+### Schema (`ponder.schema.ts`)
+
+The database schema includes the following tables:
+
+```
+tokens       - Token metadata, supply, and market cap
+poolsV2      - UniswapV2 pool data and launch metrics
+poolsV3      - UniswapV3 pool data (future expansion)
+snipers      - Tracks addresses, volume, and token acquisition
+funding      - Maps ETH flow leading to token deployment
+dummyTable   - For testing database connectivity
+```
 
 ### Handlers
 
-There are two approaches for handling events:
+Event handlers are organized by protocol version and event type:
 
-#### Option 1: Consolidated Handlers
+#### UniswapV2
+- `PairCreated.ts`: Detects new token pair creation, extracts token data
+- `Mint.ts`: Tracks initial liquidity provision to pairs
+- `Swap.ts`: Analyzes trading activity, detects snipers and team bundles
 
-In this approach, all related events are handled in a single file:
-- `src/handlers/UniswapV2.ts`: Handles the `PairCreated` event
-- `src/handlers/UniswapV2Pair.ts`: Handles `Mint` and `Swap` events for UniswapV2 pairs
+#### UniswapV3 (Support in progress)
+- `PoolCreated.ts`: Detects new V3 pool creation
+- `Initialize.ts`: Handles pool initialization events
+- `Mint.ts`: Tracks liquidity position creation
+- `Swap.ts`: Analyzes V3 swap activity
 
-#### Option 2: Separated Event Handlers
+### API (`src/api/index.ts`)
 
-Alternatively, you can separate handlers by event type:
-- `src/handlers/UniswapV2Factory.ts`: For factory events (PairCreated)
-- `src/handlers/UniswapV2PairMint.ts`: For LP provision events (Mint)
-- `src/handlers/UniswapV2PairSwap.ts`: For swap events (Swap)
+RESTful endpoints to query indexed data:
+- `/tokens`: List all indexed tokens
+- `/token/:address`: Get details for specific token
+- `/pools`: List all indexed pools
+- `/pool/:id`: Get details for specific pool
+- `/snipers/:poolId`: Get sniper data for a pool
+- `/funding/:tokenAddress`: View funding graph for a token
+- `/dashboard`: Get aggregate statistics
+- `/launch-summary/:tokenAddress`: Comprehensive token launch data
 
 ### Utilities
 
-- `src/utils/sniper.ts`: Contains utilities for tracking sniper activity
-- `src/utils/getMetadata.ts`: Fetches token metadata
+- `baseTokens.ts`: Manages base token detection (WETH, stablecoins)
+- `sniper.ts`: Algorithms for sniper detection and analysis
+- `funding.ts`: Tools to trace funding paths
+- `bundle.ts`: Team bundle detection heuristics
+- `getMetadata.ts`: Fetches token metadata from contracts
+- `marketCap.ts`: Calculates market capitalization
+- `utils.ts`: General helper functions
 
-## Implementing the Handlers
+## 🛠️ Tech Stack
 
-Due to issues with the current Ponder API and event type definitions, there are a few options:
+- **[Ponder](https://ponder.sh/)**: Blockchain indexing framework
+- **TypeScript**: Type-safe development
+- **Hono**: API routing
+- **Viem**: Ethereum interactions
+- **SQLite**: Database (via PGlite in Ponder)
+- **Forge/Anvil**: Local blockchain testing
 
-1. **Fix the config.ts file** to properly include the UniswapV2Pair factory pattern
-2. **Use a dynamic approach** where you create UnsiwapV2Pair contract instances in the PairCreated handler
+## 🚀 Getting Started
 
-## Recommendations
+### Prerequisites
+- Node.js (>= 16)
+- pnpm or npm
+- Foundry (for local testing)
 
-Since you mentioned not to change the config.ts file, I recommend the following approach:
+### Installation
 
-1. Use the UniswapV2.ts handler as implemented to track pair creation
-2. Create a utility function to handle Mint and Swap events by listening to those events through transaction logs rather than using direct Ponder event handlers
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/token-launch-indexer.git
+cd token-launch-indexer
 
-## Metrics Tracked
+# Install dependencies
+pnpm install
+```
 
-1. **Initial LP**
-   - ETH amount provided as initial liquidity
+### Local Development with Anvil
 
-2. **Snipers**
-   - Addresses that bought in the same block as launch
-   - Total ETH volume from snipers
-   - Percentage of token supply acquired by snipers
-   - Count of unique snipers
+1. Start a local Ethereum node with Anvil:
 
-## Usage
+```bash
+anvil
+```
 
-To properly implement this system:
+2. Deploy the testing contracts:
 
-1. The `ponder.config.ts` file needs to be updated to include the UniswapV2Pair contract with the factory pattern (already done)
-2. Use the updated sniper utility functions to process swap events
-3. Implement the handlers following either the consolidated or separated approach 
+```bash
+cd testing
+forge script script/Deploy.s.sol --broadcast --rpc-url http://localhost:8545
+```
+
+3. Run the indexer in development mode:
+
+```bash
+pnpm ponder dev --config minimal.config.ts
+```
+
+The indexer will now track events from your locally deployed Uniswap V2 infrastructure.
+
+### Mainnet Indexing
+
+To index data from Ethereum mainnet:
+
+1. Set up your environment variables:
+
+```bash
+# Create .env file
+echo "PONDER_RPC_URL_1=YOUR_ETHEREUM_RPC_URL" > .env
+```
+
+2. Update the configuration in `ponder.config.ts` with appropriate start blocks.
+
+3. Run the indexer:
+
+```bash
+pnpm ponder dev
+```
+
+### Production Deployment
+
+For production environments:
+
+```bash
+pnpm ponder build
+pnpm ponder start
+```
+
+## 📊 Analyzing Data
+
+The indexer exposes data through various API endpoints:
+
+- **Web Interface**: http://localhost:42069/
+- **Dashboard**: http://localhost:42069/dashboard
+- **GraphQL Playground**: http://localhost:42069/graphql
+
+## 🧪 Testing
+
+```bash
+# Run tests
+pnpm test
+
+# Test with a specific scenario
+forge script testing/script/Deploy.s.sol:DeployWithNormalLaunch --broadcast --rpc-url http://localhost:8545
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📜 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

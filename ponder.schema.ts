@@ -1,4 +1,3 @@
-import { table } from "console";
 import { index, onchainTable } from "ponder";
 // https://ponder.sh/docs/schema
 
@@ -27,14 +26,13 @@ export const poolsV2 = onchainTable("poolsV2", (t) => ({
   lpType: t.text().notNull().default("UniswapV2"),                    
   launchBlock: t.integer().notNull(),             
   launchTimestamp: t.integer().notNull(),
+  launchTxHash: t.text().notNull(),  // Store the transaction hash of the launch
   initialLpEth: t.bigint(),
   baseTokenIsToken0: t.boolean().notNull().default(true), // Track original token order
   totalSniperVolume: t.bigint(),
   totalSnipersCount: t.integer(),
   totalSniperSupplyPercent: t.real(),
-  teamBundleDetected: t.boolean().default(false),
-  teamBundleBlocks: t.bigint(),
-  teamBundleTxCount: t.integer(),
+  teamBundle: t.boolean().default(false),
 }));
 
 // ──────────────
@@ -48,13 +46,13 @@ export const poolsV3 = onchainTable("poolsV3", (t) => ({
   lpType: t.text().notNull().default("UniswapV3"),                    
   launchBlock: t.integer().notNull(),             
   launchTimestamp: t.integer().notNull(),
+  launchTxHash: t.text().notNull(),
+  baseTokenIsToken0: t.boolean().notNull().default(true), // Track original token order
   initialLpEth: t.bigint(),
   totalSniperVolume: t.bigint(),
   totalSnipersCount: t.integer(),
   totalSniperSupplyPercent: t.real(),
-  teamBundleDetected: t.boolean().default(false),
-  teamBundleBlocks: t.bigint(),
-  teamBundleTxCount: t.integer(),
+  teamBundle: t.boolean().default(false),
 }));
 
 // ──────────────
@@ -68,23 +66,6 @@ export const snipers = onchainTable("snipers", (t) => ({
   tokenAmount: t.bigint().notNull(),              
   percentOfSupply: t.real().notNull(),          
 }), (table) => ({
-    poolIndex: index().on(table.pool),
-}));
-
-// ──────────────
-// Team Bundle Table
-// ──────────────
-export const teamBundles = onchainTable("teamBundles", (t) => ({
-  id: t.text().primaryKey(),
-  token: t.hex().notNull(),
-  pool: t.hex().notNull(),
-  bundleBlocks: t.bigint().notNull(),
-  txCount: t.integer().notNull(),
-  firstBlock: t.integer().notNull(),
-  lastBlock: t.integer().notNull(),
-  bundleHash: t.text(),
-}), (table) => ({
-  tokenIndex: index().on(table.token),
   poolIndex: index().on(table.pool),
 }));
 
@@ -92,12 +73,22 @@ export const teamBundles = onchainTable("teamBundles", (t) => ({
 // Funding Graph
 // ──────────────
 export const funding = onchainTable("funding", (t) => ({
-    id: t.text().primaryKey(),               
-    token: t.hex().notNull(),
-    level: t.integer().notNull(),           
-    from: t.hex().notNull(),
-    to: t.hex().notNull(),
-    value: t.bigint().notNull(),
-  }), (table) => ({
-    tokenIndex: index().on(table.token),
-  }));
+  id: t.text().primaryKey(),               
+  token: t.hex().notNull(),
+  level: t.integer().notNull(),           
+  from: t.hex().notNull(),
+  to: t.hex().notNull(),
+  value: t.bigint().notNull(),
+}), (table) => ({
+  tokenIndex: index().on(table.token),
+}));
+
+// ──────────────
+// Dummy Table for Testing
+// ──────────────
+export const dummyTable = onchainTable("dummyTable", (t) => ({
+  id: t.text().primaryKey(),
+  name: t.text().notNull(),
+  value: t.integer().notNull(),
+  created_at: t.integer().notNull(), // Fixed column name to use snake_case
+}));

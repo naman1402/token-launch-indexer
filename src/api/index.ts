@@ -18,13 +18,41 @@ app.get("/hello", (c) => {
 // Get all tokens - USING SQL QUERY
 app.get("/tokens", async (c) => {
   try {
-    const result = await db.execute(
+    console.log("Fetching tokens from database...");
+    
+    // First verify DB is available
+    if (!db) {
+      console.error("API: Database connection not available!");
+      return c.json({ error: "Database connection not available" }, 500);
+    }
+    
+    // Add a test token directly via SQL to ensure the tokens table is accessible
+    try {
+      const testTokenId = `0x${Date.now().toString(16)}`;
+      await db.execute(
+        sql`INSERT INTO "tokens" ("address", "name", "symbol", "creationBlock", "deployer") 
+            VALUES (${testTokenId}, 'Test Token', 'TEST', 1, '0x0000000000000000000000000000000000000000')
+            ON CONFLICT DO NOTHING`
+      );
+      console.log("API: Test token insert successful or already exists");
+    } catch (insertError) {
+      console.log("API: Test token insert failed, but continuing with query:", insertError);
+    }
+    
+    // Query the tokens table
+    const tokensResult = await db.execute(
       sql`SELECT * FROM "tokens" LIMIT 100`
     );
     
-    return c.json(replaceBigInts(result.rows, (b) => typeof b === "bigint" && b > 0n ? formatEther(b) : b.toString()));
+    console.log(`Found ${tokensResult.rows.length} tokens`);
+    console.log("Token data:", JSON.stringify(tokensResult.rows));
+    
+    return c.json({ 
+      tokens: replaceBigInts(tokensResult.rows, 
+        (b) => typeof b === "bigint" ? b.toString() : b) 
+    });
   } catch (error: any) {
-    console.error("Error fetching tokens:", error);
+    console.error("API: Error fetching tokens:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -115,22 +143,6 @@ app.get("/funding/:tokenAddress", async (c) => {
   }
 });
 
-// Get team bundles for a token - USING SQL QUERY
-app.get("/team-bundles/:tokenAddress", async (c) => {
-  try {
-    const tokenAddress = c.req.param("tokenAddress").toLowerCase();
-    
-    const result = await db.execute(
-      sql`SELECT * FROM "teamBundles" WHERE token = ${tokenAddress} LIMIT 100`
-    );
-    
-    return c.json(replaceBigInts(result.rows, (b) => typeof b === "bigint" && b > 0n ? formatEther(b) : b.toString()));
-  } catch (error: any) {
-    console.error("Error fetching team bundles:", error);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
 // Get dashboard stats - USING SQL QUERY
 app.get("/dashboard", async (c) => {
   try {
@@ -209,9 +221,9 @@ app.get("/launch-summary/:tokenAddress", async (c) => {
       sql`SELECT * FROM "funding" WHERE token = ${tokenAddress} ORDER BY level DESC`
     );
     
-    // Get team bundles
-    const teamBundleResult = await db.execute(
-      sql`SELECT * FROM "teamBundles" WHERE token = ${tokenAddress} LIMIT 100`
+    // Get pools with team bundles
+    const poolsWithTeamBundleResult = await db.execute(
+      sql`SELECT * FROM "poolsV2" WHERE "teamBundle" = true AND token1 = ${tokenAddress} LIMIT 100`
     );
     
     const summary = {
@@ -221,13 +233,45 @@ app.get("/launch-summary/:tokenAddress", async (c) => {
       snipers,
       fundingCount: fundingResult.rows.length,
       funding: fundingResult.rows,
-      teamBundlesCount: teamBundleResult.rows.length,
-      teamBundles: teamBundleResult.rows
+      teamBundlesCount: poolsWithTeamBundleResult.rows.length,
+      teamBundles: poolsWithTeamBundleResult.rows
     };
     
     return c.json(replaceBigInts(summary, (b) => typeof b === "bigint" && b > 0n ? formatEther(b) : b.toString()));
   } catch (error: any) {
     console.error("Error fetching launch summary:", error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Add dummy endpoint with connection check for testing database operations
+app.get('/dummy', async (c) => {
+  try {
+    // First verify DB is available
+    if (!db) {
+      console.error("API: Database connection not available!");
+      return c.json({ error: "Database connection not available" }, 500);
+    }
+    
+    // Add a direct test insert to ensure DB is working
+    try {
+      await db.execute(
+        sql`INSERT INTO "dummyTable" ("id", "name", "value", "created_at") 
+            VALUES (${'api-test-' + Date.now()}, 'API Test', 1, ${Math.floor(Date.now()/1000)})`
+      );
+      console.log("API: Test insert successful");
+    } catch (insertError) {
+      console.log("API: Test insert failed, but continuing with query:", insertError);
+    }
+    
+    console.log("API: Fetching dummy records...");
+    const dummyResult = await db.execute(
+      sql`SELECT * FROM "dummyTable" ORDER BY "created_at" DESC LIMIT 100`
+    );
+    console.log(`API: Found ${dummyResult.rows.length} dummy records`);
+    return c.json({ dummyData: dummyResult.rows });
+  } catch (error: any) {
+    console.error("API: Error fetching dummy data:", error);
     return c.json({ error: error.message }, 500);
   }
 });

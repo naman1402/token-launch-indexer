@@ -1,50 +1,63 @@
 import { parseAbiItem } from "abitype";
 import { createConfig, factory } from "ponder";
-
 import { http } from "viem";
 
-import { UniswapV2FactoryABI } from "./abis/UniswapV2FactoryABI";
-import { UniswapV3FactoryABI } from "./abis/UniswapV3FactoryABI";
-import { mainnet } from "viem/chains";
-import path from "path";
+// Import all ABIs
+import { uniswapV2FactoryABI } from "./abis/UniswapV2FactoryABI";
+import { uniswapV2PairABI } from "./abis/UniswapV2PairABI";
+import { uniswapV3FactoryABI } from "./abis/UniswapV3FactoryABI";
+import { uniswapV3PoolABI } from "./abis/UniswapV3PoolABI";
 
-const pairCreatedEvent = parseAbiItem(
-  "event PairCreated(address indexed token0, address indexed token1, address pair, uint)"
-);
+// Import utility function to get deployed addresses
+import { getContractAddresses } from "./src/utils/getDeployedAddresses";
 
-const poolCreatedEvent = parseAbiItem(
-  "event PoolCreated(address indexed token0, address indexed token1, uint24 fee, int24 tickSpacing, address pool)"
-);
-
-const mintEvent = parseAbiItem(
-  "event Mint(address indexed sender, uint amount0, uint amount1)"
-)
-
-const swapEvent = parseAbiItem(
-  "event Swap(address indexed sender, uint amount0In, uint amount1In, uint amount0Out, uint amount1Out, address indexed to)"
-)
+// Get the latest deployed contract addresses
+const addresses = getContractAddresses();
 
 export default createConfig({
   networks: {
     anvil: {
-      chainId: 1,
-      transport: http(process.env.PONDER_RPC_URL_1),
-
+      chainId: 31337,
+      transport: http("http://0.0.0.0:8545"),
+      disableCache: true,
     },
   },
   contracts: {
+    // Factory using full ABI
     UniswapV2Factory: {
       network: "anvil",
-      abi: [pairCreatedEvent, mintEvent, swapEvent],
-      address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // This address might need to change based on your local deployment
-      startBlock: 17001795, // Start from block 0 for local testing
-      endBlock: 17002000, 
+      abi: uniswapV2FactoryABI,
+      address: addresses.UNISWAP_V2_FACTORY_ADDRESS,
+      startBlock: 0,  
     },
+    // Pair contracts using full ABI with factory pattern
+    UniswapV2Pair: {
+      network: "anvil",
+      abi: uniswapV2PairABI,
+      address: factory({
+        address: addresses.UNISWAP_V2_FACTORY_ADDRESS,
+        event: parseAbiItem("event PairCreated(address indexed token0, address indexed token1, address pair, uint)"),
+        parameter: "pair",
+      }),
+      startBlock: 0,
+    },
+    // V3 Factory using full ABI
     UniswapV3Factory: {
       network: "anvil",
-      abi: [poolCreatedEvent],
-      address: "0x1F98431c8aD98523631AE4a59f267346ea31F984", // This address might need to change based on your local deployment
-      startBlock: 22317673, // Start from block 0 for local testing
-    }
+      abi: uniswapV3FactoryABI,
+      address: addresses.UNISWAP_V3_FACTORY_ADDRESS ,
+      startBlock: 0,
+    },
+    // V3 Pool using proper ABI now
+    UniswapV3Pool: {
+      network: "anvil",
+      abi: uniswapV3PoolABI,
+      address: factory({
+        address: addresses.UNISWAP_V3_FACTORY_ADDRESS,
+        event: parseAbiItem("event PoolCreated(address indexed token0, address indexed token1, uint24 indexed fee, int24 tickSpacing, address pool)"),
+        parameter: "pool",
+      }),
+      startBlock: 0,
+    },
   },
 });

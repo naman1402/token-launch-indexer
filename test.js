@@ -1,0 +1,1 @@
+fetch('http://127.0.0.1:8545', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1})}).then(r => r.json()).then(console.log).catch(e => console.error(e))
